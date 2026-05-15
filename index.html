@@ -324,6 +324,9 @@ let pdbData     = "";
 let pdbId       = "";
 let ligResname  = "";
 let allAtoms    = [];
+// 追蹤上傳的檔案資料（讓按鈕也能使用）
+let uploadedPdbText = null;
+let uploadedFileName = "";
 let hbonds      = [];
 let nearbyRes   = [];
 let labelsOn    = true;
@@ -781,7 +784,29 @@ async function fetchAndAnalyze() {
   const cutoff  = parseFloat(document.getElementById("cutoff-input").value) || 3.5;
   const chain   = document.getElementById("chain-input").value.trim().toUpperCase();
 
-  if (!id) { showError("請輸入 PDB ID"); return; }
+  // 如果沒有 PDB ID，但有已上傳的檔案 → 直接用上傳資料
+  if (!id && uploadedPdbText) {
+    hideError();
+    setFetchBtn(true);
+    showStatus(`分析上傳的檔案：${uploadedFileName} ...`);
+    try {
+      pdbData = uploadedPdbText;
+      pdbId   = uploadedFileName.replace(/\.pdb|\.ent/i,"").toUpperCase();
+      await runAnalysis(pdbId, pdbData, ligName, cutoff, chain);
+    } catch(e) {
+      showError(e.message || String(e));
+      hideStatus();
+    } finally {
+      setFetchBtn(false);
+    }
+    return;
+  }
+
+  // 兩者皆無
+  if (!id) {
+    showError("請輸入 PDB ID，或先上傳 .pdb 檔案後再點此按鈕");
+    return;
+  }
   if (!/^[A-Z0-9]{1,8}$/.test(id)) { showError("PDB ID 格式不正確（1–8 字母數字）"); return; }
 
   hideError();
@@ -824,9 +849,17 @@ function readFile(file) {
   const reader = new FileReader();
   reader.onload = async e => {
     try {
-      pdbData = e.target.result;
+      // 儲存至全域，讓「載入 & 分析」按鈕也能取用
+      uploadedPdbText = e.target.result;
+      uploadedFileName = file.name;
+      pdbData = uploadedPdbText;
       pdbId   = file.name.replace(/\.pdb|\.ent/i,"").toUpperCase();
-      document.getElementById("upload-zone").textContent = `✓ ${file.name}`;
+      // 更新上傳區：顯示檔名並提示可調整參數後重新分析
+      document.getElementById("upload-zone").innerHTML =
+        `✅ <strong>${file.name}</strong> &nbsp;
+         <span style="font-size:.8rem;color:var(--blue)">
+           已上傳 — 調整上方參數後可再點「載入 & 分析」重新分析
+         </span>`;
       await runAnalysis(pdbId, pdbData, ligName, cutoff, chain);
     } catch(err) {
       showError(err.message || String(err));
