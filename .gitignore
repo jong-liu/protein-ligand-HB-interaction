@@ -1,3 +1,9 @@
+# 只 push index.html，其餘本機工具不上傳
+hb_analyzer.py
+pymol_automation.py
+git_setup_commands.txt
+*.py
+
 # Python
 __pycache__/
 *.py[cod]
