@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# PyMOL 輸出
+pymol_output/
+*.pse
+*.png
+*.ray
+
+# 分析輸出
+*_hb_report.html
+*_hb_data.json
+*_data.json
+*_hbonds.json
+
+# 環境
+.env
+.venv
+venv/
+env/
+*.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Windows
+desktop.ini

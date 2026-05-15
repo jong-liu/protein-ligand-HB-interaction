@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PyMOL HB Interaction Analyzer</title>
+<script src="https://3dmol.org/build/3Dmol-min.js"></script>
+<style>
+/* ── CSS Variables ── */
+:root {
+  --blue-dark:#1e3a5f; --blue:#2563eb; --blue-light:#eff6ff;
+  --green:#16a34a; --orange:#ea580c; --red:#dc2626;
+  --yellow:#ca8a04; --purple:#7c3aed;
+  --bg:#f1f5f9; --card:#ffffff; --border:#e2e8f0;
+  --text:#1e293b; --sub:#64748b; --radius:12px;
+  --shadow:0 2px 12px rgba(0,0,0,.08);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);
+     color:var(--text);min-height:100vh}
+
+/* ── Header ── */
+#app-header{
+  background:linear-gradient(135deg,var(--blue-dark) 0%,var(--blue) 100%);
+  color:#fff;padding:1.5rem 2rem;display:flex;align-items:center;gap:1rem;
+  box-shadow:0 4px 16px rgba(30,58,95,.4)
+}
+#app-header h1{font-size:1.5rem;font-weight:700}
+#app-header p{font-size:.85rem;opacity:.8;margin-top:.2rem}
+.header-icon{font-size:2.2rem}
+
+/* ── Layout ── */
+.main-wrap{max-width:1280px;margin:0 auto;padding:1.5rem}
+.section-title{font-size:1rem;font-weight:700;color:var(--blue-dark);
+               margin-bottom:.8rem;display:flex;align-items:center;gap:.4rem}
+
+/* ── Input Card ── */
+#input-card{background:var(--card);border-radius:var(--radius);
+            box-shadow:var(--shadow);padding:1.5rem;margin-bottom:1.5rem;
+            border:1px solid var(--border)}
+.input-row{display:flex;gap:.75rem;flex-wrap:wrap;align-items:flex-end}
+.field-group{display:flex;flex-direction:column;gap:.3rem;flex:1;min-width:140px}
+label{font-size:.82rem;font-weight:600;color:var(--sub)}
+input[type=text],select{
+  border:1.5px solid var(--border);border-radius:8px;
+  padding:.55rem .85rem;font-size:.92rem;width:100%;
+  transition:border-color .2s;background:#fff;color:var(--text)}
+input[type=text]:focus,select:focus{
+  outline:none;border-color:var(--blue);
+  box-shadow:0 0 0 3px rgba(37,99,235,.12)}
+.btn{padding:.6rem 1.4rem;border-radius:8px;border:none;cursor:pointer;
+     font-size:.92rem;font-weight:600;transition:all .18s;white-space:nowrap}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-primary:hover{background:#1d4ed8;transform:translateY(-1px)}
+.btn-primary:disabled{background:#93c5fd;cursor:not-allowed;transform:none}
+.btn-secondary{background:#f1f5f9;color:var(--text);border:1.5px solid var(--border)}
+.btn-secondary:hover{background:#e2e8f0}
+
+/* ── Divider ── */
+.divider{display:flex;align-items:center;gap:.75rem;margin:.75rem 0;
+         color:var(--sub);font-size:.82rem}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border)}
+
+/* ── Upload zone ── */
+#upload-zone{border:2px dashed var(--border);border-radius:8px;padding:1rem;
+             text-align:center;cursor:pointer;transition:all .2s;font-size:.85rem;
+             color:var(--sub)}
+#upload-zone:hover,#upload-zone.drag-over{border-color:var(--blue);
+  background:var(--blue-light);color:var(--blue)}
+#upload-zone input{display:none}
+
+/* ── Status bar ── */
+#status-bar{background:var(--card);border:1px solid var(--border);
+            border-radius:var(--radius);padding:.75rem 1.25rem;
+            margin-bottom:1.5rem;display:none;
+            align-items:center;gap:.75rem}
+#status-bar.show{display:flex}
+.spinner{width:20px;height:20px;border:2.5px solid var(--border);
+         border-top-color:var(--blue);border-radius:50%;
+         animation:spin .7s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+#status-text{font-size:.88rem;color:var(--sub)}
+
+/* ── Main Grid ── */
+#main-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;
+           margin-bottom:1.25rem}
+@media(max-width:900px){#main-grid{grid-template-columns:1fr}}
+
+/* ── Viewer Card ── */
+#viewer-card{background:var(--card);border-radius:var(--radius);
+             box-shadow:var(--shadow);padding:1rem;
+             border:1px solid var(--border)}
+#mol-viewer{width:100%;height:400px;border-radius:8px;
+            overflow:hidden;background:#0f1923;position:relative}
+.viewer-controls{display:flex;gap:.5rem;margin-top:.6rem;flex-wrap:wrap}
+.view-btn{padding:.3rem .75rem;border-radius:6px;border:1.5px solid var(--border);
+          background:#f8fafc;font-size:.78rem;cursor:pointer;
+          transition:all .15s;color:var(--text)}
+.view-btn:hover{background:var(--blue-light);border-color:var(--blue);color:var(--blue)}
+.view-btn.active{background:var(--blue);color:#fff;border-color:var(--blue)}
+
+/* ── Stats Card ── */
+#stats-card{background:var(--card);border-radius:var(--radius);
+            box-shadow:var(--shadow);padding:1rem;
+            border:1px solid var(--border)}
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem}
+.stat-box{text-align:center;padding:.9rem .5rem;background:var(--blue-light);
+          border-radius:8px}
+.stat-val{font-size:2rem;font-weight:800;color:var(--blue);line-height:1}
+.stat-lbl{font-size:.72rem;color:var(--sub);margin-top:.3rem}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:.4rem .75rem;
+           margin-top:.75rem;font-size:.83rem}
+.info-label{color:var(--sub);font-weight:600}
+.info-value{color:var(--text);font-weight:500}
+
+/* ── HBond Table ── */
+#hbond-card{background:var(--card);border-radius:var(--radius);
+            box-shadow:var(--shadow);padding:1rem;
+            border:1px solid var(--border);margin-bottom:1.25rem}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th{background:var(--blue-light);padding:.5rem .7rem;text-align:left;
+   font-weight:700;border-bottom:2px solid var(--border);
+   font-size:.78rem;text-transform:uppercase;letter-spacing:.02em;color:var(--blue-dark)}
+td{padding:.45rem .7rem;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#f8fafc}
+.dist-pill{display:inline-block;padding:.12rem .5rem;border-radius:999px;
+           font-size:.78rem;font-weight:700}
+.hb-strong{background:#dcfce7;color:#14532d}
+.hb-medium{background:#fef9c3;color:#713f12}
+.hb-weak  {background:#fee2e2;color:#7f1d1d}
+.atom-tag{font-family:monospace;background:#f1f5f9;padding:.1rem .35rem;
+          border-radius:4px;font-size:.82rem}
+
+/* ── Mutation Cards ── */
+#mutation-card{background:var(--card);border-radius:var(--radius);
+               box-shadow:var(--shadow);padding:1rem;
+               border:1px solid var(--border);margin-bottom:1.25rem}
+.mut-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:.75rem}
+.mut-item{border-left:4px solid var(--blue);background:#f8fafc;
+          border-radius:0 8px 8px 0;padding:.8rem 1rem}
+.mut-item.priority-high{border-color:var(--red)}
+.mut-item.priority-mid {border-color:var(--orange)}
+.mut-header{display:flex;justify-content:space-between;align-items:center;
+            margin-bottom:.3rem}
+.mut-resname{font-weight:700;font-size:.95rem}
+.priority-badge{font-size:.7rem;font-weight:700;padding:.12rem .45rem;
+                border-radius:999px}
+.badge-high{background:#fee2e2;color:#b91c1c}
+.badge-mid {background:#fef3c7;color:#92400e}
+.mut-role{font-size:.78rem;color:var(--sub);margin-bottom:.35rem}
+.mut-sugg{font-size:.82rem;color:var(--text);line-height:1.5}
+.mut-dist{display:inline-block;background:#dcfce7;color:#14532d;
+          padding:.08rem .4rem;border-radius:4px;font-size:.75rem;
+          font-weight:700;margin-left:.4rem}
+
+/* ── Nearby Residues ── */
+#nearby-card{background:var(--card);border-radius:var(--radius);
+             box-shadow:var(--shadow);padding:1rem;
+             border:1px solid var(--border);margin-bottom:1.25rem}
+.residue-chips{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.6rem}
+.chip{padding:.25rem .65rem;border-radius:999px;font-size:.78rem;
+      font-weight:600;cursor:pointer;transition:all .15s}
+.chip-hb{background:#dbeafe;color:#1e40af;border:1.5px solid #93c5fd}
+.chip-contact{background:#f1f5f9;color:var(--sub);border:1.5px solid var(--border)}
+.chip:hover{transform:translateY(-1px);box-shadow:0 2px 6px rgba(0,0,0,.1)}
+
+/* ── Report ── */
+#report-card{background:var(--card);border-radius:var(--radius);
+             box-shadow:var(--shadow);padding:1rem;
+             border:1px solid var(--border)}
+.report-actions{display:flex;gap:.75rem;flex-wrap:wrap}
+
+/* ── Empty / Error state ── */
+#empty-state{text-align:center;padding:3rem;color:var(--sub)}
+#empty-state .empty-icon{font-size:3rem;margin-bottom:.75rem}
+#error-banner{background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;
+              padding:.75rem 1rem;color:#991b1b;font-size:.88rem;
+              display:none;margin-bottom:1rem}
+</style>
+</head>
+<body>
+
+<div id="app-header">
+  <div class="header-icon">🔬</div>
+  <div>
+    <h1>PyMOL HB Interaction Analyzer</h1>
+    <p>蛋白質–配體氫鍵交互作用自動化分析平台</p>
+  </div>
+</div>
+
+<div class="main-wrap">
+
+  <!-- ── 輸入區 ── -->
+  <div id="input-card">
+    <div class="section-title">📥 載入蛋白質結構</div>
+    <div class="input-row">
+      <div class="field-group" style="max-width:160px">
+        <label>PDB ID</label>
+        <input type="text" id="pdb-id-input" placeholder="例：1HSG" maxlength="8"
+               style="text-transform:uppercase;letter-spacing:.08em;font-family:monospace">
+      </div>
+      <div class="field-group" style="max-width:160px">
+        <label>配體 ResName（選填）</label>
+        <input type="text" id="lig-input" placeholder="自動偵測" maxlength="6"
+               style="text-transform:uppercase;font-family:monospace">
+      </div>
+      <div class="field-group" style="max-width:130px">
+        <label>H-Bond 上限 (Å)</label>
+        <input type="text" id="cutoff-input" value="3.5" style="font-family:monospace">
+      </div>
+      <div class="field-group" style="max-width:160px">
+        <label>Chain（選填）</label>
+        <input type="text" id="chain-input" placeholder="全部" maxlength="4"
+               style="text-transform:uppercase;font-family:monospace">
+      </div>
+      <div class="field-group" style="align-self:flex-end">
+        <button class="btn btn-primary" id="fetch-btn" onclick="fetchAndAnalyze()">
+          🔍 載入 &amp; 分析
+        </button>
+      </div>
+    </div>
+
+    <div class="divider">或</div>
+
+    <div id="upload-zone" onclick="document.getElementById('file-input').click()"
+         ondragover="event.preventDefault();this.classList.add('drag-over')"
+         ondragleave="this.classList.remove('drag-over')"
+         ondrop="handleDrop(event)">
+      <input type="file" id="file-input" accept=".pdb,.ent" onchange="handleFile(event)">
+      📂 點此或拖曳上傳 .pdb / .ent 檔案
+    </div>
+  </div>
+
+  <!-- ── 狀態列 ── -->
+  <div id="status-bar">
+    <div class="spinner"></div>
+    <div id="status-text">載入中...</div>
+  </div>
+
+  <!-- ── 錯誤提示 ── -->
+  <div id="error-banner"></div>
+
+  <!-- ── 空白狀態 ── -->
+  <div id="empty-state">
+    <div class="empty-icon">🧬</div>
+    <div>輸入 PDB ID 或上傳結構檔案以開始分析</div>
+    <div style="font-size:.8rem;margin-top:.5rem">
+      推薦範例：1HSG（HIV 蛋白酶+MK1）、3HTB、2HHB
+    </div>
+  </div>
+
+  <!-- ── 分析結果（初始隱藏）── -->
+  <div id="result-area" style="display:none">
+
+    <!-- 3D + Stats -->
+    <div id="main-grid">
+      <div id="viewer-card">
+        <div class="section-title">🧬 3D 結構視覺化</div>
+        <div id="mol-viewer"></div>
+        <div class="viewer-controls">
+          <button class="view-btn active" onclick="setStyle('cartoon')">Cartoon</button>
+          <button class="view-btn" onclick="setStyle('surface')">表面</button>
+          <button class="view-btn" onclick="setStyle('cartoon+surface')">Cartoon+表面</button>
+          <button class="view-btn" onclick="toggleLabels()">標籤 開/關</button>
+          <button class="view-btn" onclick="resetView()">🔍 重置視角</button>
+          <button class="view-btn" onclick="toggleSpin()">旋轉</button>
+        </div>
+        <div style="font-size:.72rem;color:var(--sub);margin-top:.4rem">
+          黃色 = 氫鍵 | 橘色標籤 = 關鍵殘基 | 左鍵旋轉 | 右鍵平移 | 滾輪縮放
+        </div>
+      </div>
+
+      <div id="stats-card">
+        <div class="section-title">📊 分析摘要</div>
+        <div class="stat-grid" id="stat-grid"></div>
+        <div class="info-grid" id="info-grid" style="margin-top:.75rem"></div>
+      </div>
+    </div>
+
+    <!-- H-bond Table -->
+    <div id="hbond-card">
+      <div class="section-title">⚡ 氫鍵交互作用清單</div>
+      <div id="hbond-table-wrap"></div>
+    </div>
+
+    <!-- Mutation Analysis -->
+    <div id="mutation-card">
+      <div class="section-title">🧪 突變位點分析</div>
+      <div id="mutation-grid" class="mut-grid"></div>
+    </div>
+
+    <!-- Nearby Residues -->
+    <div id="nearby-card">
+      <div class="section-title">🔍 結合位點近鄰殘基（5 Å）</div>
+      <div id="residue-chips" class="residue-chips"></div>
+    </div>
+
+    <!-- Report Export -->
+    <div id="report-card">
+      <div class="section-title">📄 報告匯出</div>
+      <div class="report-actions">
+        <button class="btn btn-primary" onclick="exportHTML()">💾 下載 HTML 報告</button>
+        <button class="btn btn-secondary" onclick="exportJSON()">📋 下載 JSON 資料</button>
+        <button class="btn btn-secondary" onclick="exportCSV()">📊 下載 CSV</button>
+        <button class="btn btn-secondary" onclick="copyPyMOL()">📋 複製 PyMOL 指令</button>
+      </div>
+      <div id="pymol-cmd-box" style="display:none;margin-top:.75rem">
+        <textarea id="pymol-cmds" style="width:100%;height:180px;font-family:monospace;
+          font-size:.8rem;border:1.5px solid var(--border);border-radius:8px;
+          padding:.6rem;resize:vertical;background:#1e2936;color:#a8d8f0"></textarea>
+      </div>
+    </div>
+
+  </div><!-- /result-area -->
+</div><!-- /main-wrap -->
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// Global State
+// ═══════════════════════════════════════════════════════════════════════════
+let viewer      = null;
+let pdbData     = "";
+let pdbId       = "";
+let ligResname  = "";
+let allAtoms    = [];
+let hbonds      = [];
+let nearbyRes   = [];
+let labelsOn    = true;
+let spinning    = false;
+let currentStyle = "cartoon";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Constants
+// ═══════════════════════════════════════════════════════════════════════════
+const WATER_RES   = new Set(["HOH","WAT","H2O","DOD","TIP","SOL"]);
+const HB_ELEMENTS = new Set(["N","O","S","F"]);
+const AA_ONE      = {
+  ALA:"A",ARG:"R",ASN:"N",ASP:"D",CYS:"C",GLN:"Q",GLU:"E",
+  GLY:"G",HIS:"H",ILE:"I",LEU:"L",LYS:"K",MET:"M",PHE:"F",
+  PRO:"P",SER:"S",THR:"T",TRP:"W",TYR:"Y",VAL:"V",
+  HID:"H",HIE:"H",HIP:"H",CYX:"C",MSE:"M"
+};
+const MUTATION_HINTS = {
+  SER:"Ser→Ala 移除 -OH 破壞氫鍵；Ser→Thr 增加空間位阻",
+  THR:"Thr→Val 移除 -OH 消除氫鍵能力",
+  TYR:"Tyr→Phe 移除酚 -OH；Tyr→Trp 增大疏水接觸",
+  ASN:"Asn→Ala 移除醯胺基，破壞氫鍵網絡",
+  GLN:"Gln→Ala 縮短側鏈；Gln→Glu 引入負電荷",
+  ASP:"Asp→Asn 中和負電荷；Asp→Ala 移除羧基",
+  GLU:"Glu→Gln 中和負電荷；Glu→Ala 移除羧基",
+  HIS:"His→Ala 移除咪唑環；His→Phe 保留芳香環但去除氫鍵",
+  ARG:"Arg→Lys 縮短側鏈；Arg→Ala 移除胍基正電荷",
+  LYS:"Lys→Arg 維持正電荷改變幾何；Lys→Ala 移除正電荷",
+  CYS:"Cys→Ser 以 -OH 替換 -SH；Cys→Ala 移除極性基",
+  TRP:"Trp→Ala 移除吲哚環，影響氫鍵與π-π堆疊",
+  MET:"Met→Leu 移除硫原子；Met→Ala 大幅縮減側鏈",
+  PHE:"Phe→Ala 移除苯環；Phe→Tyr 引入 -OH 增加氫鍵",
+  LEU:"Leu→Ala 縮短疏水側鏈；Leu→Ile 改變分支位置",
+  ILE:"Ile→Val 縮短側鏈；Ile→Ala 大幅縮減",
+  VAL:"Val→Ala 縮減疏水接觸；Val→Ile 增加側鏈長度",
+  ALA:"Ala→Gly 增加骨架彈性；Ala→Val 增加位阻",
+  GLY:"Gly→Ala 引入 Cβ 限制骨架彈性",
+  PRO:"Pro→Ala 移除環狀限制；此位點常為結構關鍵點",
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PDB Parsing
+// ═══════════════════════════════════════════════════════════════════════════
+function parsePDB(text) {
+  const atoms = [];
+  for (const line of text.split("\n")) {
+    const rec = line.substring(0,6).trim();
+    if (rec !== "ATOM" && rec !== "HETATM") continue;
+    try {
+      const altLoc = line[16] || "";
+      if (altLoc && altLoc !== " " && altLoc !== "A") continue;
+
+      let elem = line.substring(76,78).trim();
+      if (!elem) {
+        const raw = line.substring(12,16).trim();
+        elem = raw.replace(/[0-9]/g,"")[0] || "X";
+      }
+      elem = elem.toUpperCase();
+
+      atoms.push({
+        serial:  parseInt(line.substring(6,11))  || 0,
+        name:    line.substring(12,16).trim(),
+        resName: line.substring(17,20).trim(),
+        chain:   line.substring(21,22).trim()    || "A",
+        resSeq:  parseInt(line.substring(22,26)) || 0,
+        x:       parseFloat(line.substring(30,38)),
+        y:       parseFloat(line.substring(38,46)),
+        z:       parseFloat(line.substring(46,54)),
+        occupancy: parseFloat(line.substring(54,60)) || 1.0,
+        bfactor:   parseFloat(line.substring(60,66)) || 0.0,
+        element: elem,
+        isHet:   rec === "HETATM",
+      });
+    } catch(e) { /* skip bad lines */ }
+  }
+  return atoms;
+}
+
+function detectLigands(atoms) {
+  const counts = {};
+  for (const a of atoms)
+    if (a.isHet && !WATER_RES.has(a.resName)) {
+      const k = a.resName;
+      counts[k] = (counts[k]||0) + 1;
+    }
+  return Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(e=>e[0]);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// H-Bond Analysis
+// ═══════════════════════════════════════════════════════════════════════════
+function dist3(a, b) {
+  return Math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2 + (a.z-b.z)**2);
+}
+
+function findHBonds(atoms, lig, cutoff) {
+  const ligAtoms  = atoms.filter(a => a.resName===lig && HB_ELEMENTS.has(a.element));
+  const protAtoms = atoms.filter(a => !a.isHet       && HB_ELEMENTS.has(a.element));
+
+  const rawPairs = [];
+  for (const la of ligAtoms)
+    for (const pa of protAtoms) {
+      const d = dist3(la, pa);
+      if (d <= cutoff) rawPairs.push({la, pa, d});
+    }
+
+  // De-duplicate: keep shortest per (ligAtom, protResidue)
+  const best = new Map();
+  for (const p of rawPairs) {
+    const key = `${p.la.serial}_${p.pa.chain}${p.pa.resSeq}`;
+    if (!best.has(key) || p.d < best.get(key).d) best.set(key, p);
+  }
+
+  return Array.from(best.values())
+    .sort((a,b) => a.d - b.d)
+    .map(({la,pa,d}) => ({
+      ligAtom:    la.name,
+      ligElem:    la.element,
+      ligSerial:  la.serial,
+      ligResName: la.resName,
+      protAtom:   pa.name,
+      protElem:   pa.element,
+      protResName:pa.resName,
+      protChain:  pa.chain,
+      protResSeq: pa.resSeq,
+      protOne:    AA_ONE[pa.resName] || "?",
+      distance:   +d.toFixed(3),
+      ligXYZ:     [la.x, la.y, la.z],
+      protXYZ:    [pa.x, pa.y, pa.z],
+    }));
+}
+
+function findNearby(atoms, lig, cutoff=5.0) {
+  const ligAtoms  = atoms.filter(a => a.resName===lig);
+  const protAtoms = atoms.filter(a => !a.isHet);
+
+  const best = new Map();
+  for (const la of ligAtoms)
+    for (const pa of protAtoms) {
+      const d = dist3(la, pa);
+      if (d <= cutoff) {
+        const key = `${pa.chain}_${pa.resSeq}_${pa.resName}`;
+        if (!best.has(key) || d < best.get(key).minDist)
+          best.set(key, {chain:pa.chain, resSeq:pa.resSeq,
+                         resName:pa.resName, one:AA_ONE[pa.resName]||"?",
+                         minDist:+d.toFixed(3)});
+      }
+    }
+  return Array.from(best.values()).sort((a,b)=>a.minDist-b.minDist);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Fetch PDB from RCSB
+// ═══════════════════════════════════════════════════════════════════════════
+async function fetchPDB(id) {
+  const urls = [
+    `https://files.rcsb.org/download/${id}.pdb`,
+    `https://files.rcsb.org/view/${id}.pdb`,
+  ];
+  for (const url of urls) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) return await res.text();
+    } catch(e) {}
+  }
+  throw new Error(`無法從 RCSB 取得 ${id}，請確認 PDB ID 或改為上傳本地檔案`);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Main Analysis Pipeline
+// ═══════════════════════════════════════════════════════════════════════════
+async function runAnalysis(id, rawPdb, ligName, cutoff, chainFilter) {
+  setStatus("解析 PDB 結構...");
+  allAtoms = parsePDB(rawPdb);
+
+  if (!allAtoms.length) throw new Error("PDB 解析失敗，未找到 ATOM/HETATM 記錄");
+
+  const ligands = detectLigands(allAtoms);
+  if (!ligands.length) throw new Error("未找到配體（非水 HETATM 記錄）");
+
+  ligResname = (ligName || ligands[0]).toUpperCase();
+  if (!ligands.includes(ligResname))
+    throw new Error(`配體 '${ligResname}' 不在結構中。偵測到：${ligands.join(", ")}`);
+
+  // Chain filter
+  let atoms = allAtoms;
+  if (chainFilter) {
+    const chains = chainFilter.toUpperCase().split(/[,\s]+/).filter(Boolean);
+    atoms = allAtoms.filter(a => !a.isHet || a.resName===ligResname
+      ? chains.includes(a.chain) || a.resName===ligResname
+      : false);
+  }
+
+  setStatus(`計算氫鍵（配體 ${ligResname}，上限 ${cutoff} Å）...`);
+  hbonds    = findHBonds(atoms, ligResname, cutoff);
+  nearbyRes = findNearby(atoms, ligResname, 5.0);
+
+  setStatus("渲染 3D 結構...");
+  renderViewer(rawPdb);
+
+  setStatus("生成分析報告...");
+  renderStats(id, atoms, ligands);
+  renderHBondTable();
+  renderMutations();
+  renderNearby();
+
+  document.getElementById("empty-state").style.display  = "none";
+  document.getElementById("result-area").style.display  = "block";
+  hideStatus();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 3D Viewer
+// ═══════════════════════════════════════════════════════════════════════════
+function renderViewer(pdb) {
+  const el = document.getElementById("mol-viewer");
+  if (viewer) viewer.clear();
+  viewer = $3Dmol.createViewer(el, {backgroundColor:"#0f1923"});
+  viewer.addModel(pdb, "pdb");
+  applyStyle("cartoon");
+  viewer.zoomTo({resn: ligResname});
+  viewer.render();
+}
+
+function applyStyle(style) {
+  if (!viewer) return;
+  viewer.setStyle({}, {});  // clear
+
+  const hasLig = ligResname !== "";
+
+  // Protein cartoon
+  if (style === "cartoon" || style === "cartoon+surface") {
+    viewer.setStyle({hetflag:false},
+      {cartoon:{colorscheme:"spectrum", opacity: style==="cartoon+surface" ? 0.7 : 0.9}});
+  }
+  // Surface
+  if (style === "surface" || style === "cartoon+surface") {
+    viewer.addSurface($3Dmol.SurfaceType.VDW,
+      {opacity:0.45, colorscheme:{gradient:"rwb", min:-1, max:1}},
+      {hetflag:false});
+  }
+
+  // Water invisible
+  viewer.setStyle({resn:"HOH"}, {});
+  viewer.setStyle({resn:"WAT"}, {});
+
+  // Ligand sticks
+  if (hasLig) {
+    viewer.setStyle({resn: ligResname},
+      {stick:{colorscheme:"default", radius:0.22},
+       sphere:{colorscheme:"default", scale:0.28}});
+  }
+
+  // H-bond cylinders
+  for (const hb of hbonds) {
+    viewer.addCylinder({
+      start:{x:hb.ligXYZ[0], y:hb.ligXYZ[1], z:hb.ligXYZ[2]},
+      end:  {x:hb.protXYZ[0], y:hb.protXYZ[1], z:hb.protXYZ[2]},
+      radius:0.07, color:"#facc15", dashed:true, fromCap:2, toCap:2
+    });
+  }
+
+  // Residue labels
+  if (labelsOn) {
+    const seen = new Set();
+    for (const hb of hbonds) {
+      const k = `${hb.protChain}${hb.protResSeq}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      viewer.addLabel(`${hb.protResName}${hb.protResSeq}\n${hb.distance.toFixed(2)}Å`, {
+        position:{x:hb.protXYZ[0], y:hb.protXYZ[1], z:hb.protXYZ[2]},
+        backgroundColor:"rgba(30,58,95,0.9)",
+        fontColor:"#fff", fontSize:11,
+        borderRadius:3, padding:3,
+      });
+    }
+  }
+
+  viewer.render();
+  currentStyle = style;
+  document.querySelectorAll(".view-btn").forEach(b => b.classList.remove("active"));
+  const map = {"cartoon":0, "surface":1, "cartoon+surface":2};
+  const btns = document.querySelectorAll(".view-btn");
+  if (map[style] !== undefined) btns[map[style]].classList.add("active");
+}
+
+function setStyle(s) { applyStyle(s); }
+function resetView()  { viewer && viewer.zoomTo({resn:ligResname},300); }
+function toggleLabels() {
+  labelsOn = !labelsOn;
+  applyStyle(currentStyle);
+}
+function toggleSpin() {
+  if (!viewer) return;
+  if (spinning) { viewer.stopAnimate(); spinning=false; }
+  else { viewer.rotate(1,{x:0,y:1,z:0},100); spinning=true; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Render Stats
+// ═══════════════════════════════════════════════════════════════════════════
+function renderStats(id, atoms, ligands) {
+  const chains = [...new Set(atoms.filter(a=>!a.isHet).map(a=>a.chain))].sort();
+  const nRes   = new Set(atoms.filter(a=>!a.isHet && a.name==="CA")
+                              .map(a=>`${a.chain}${a.resSeq}`)).size;
+  const nLigAt = atoms.filter(a=>a.resName===ligResname).length;
+  const nUniq  = new Set(hbonds.map(h=>`${h.protChain}${h.protResSeq}`)).size;
+
+  document.getElementById("stat-grid").innerHTML = `
+    <div class="stat-box"><div class="stat-val">${hbonds.length}</div>
+      <div class="stat-lbl">氫鍵對數</div></div>
+    <div class="stat-box"><div class="stat-val">${nUniq}</div>
+      <div class="stat-lbl">氫鍵殘基數</div></div>
+    <div class="stat-box"><div class="stat-val">${nearbyRes.length}</div>
+      <div class="stat-lbl">近鄰殘基（5Å）</div></div>
+  `;
+
+  document.getElementById("info-grid").innerHTML = `
+    <span class="info-label">PDB ID</span>
+    <span class="info-value" style="font-family:monospace;font-weight:700">${id}</span>
+    <span class="info-label">配體</span>
+    <span class="info-value" style="font-family:monospace">${ligResname}</span>
+    <span class="info-label">所有配體</span>
+    <span class="info-value" style="font-family:monospace;font-size:.78rem">${ligands.join(", ")}</span>
+    <span class="info-label">蛋白質殘基</span>
+    <span class="info-value">${nRes}</span>
+    <span class="info-label">配體原子數</span>
+    <span class="info-value">${nLigAt}</span>
+    <span class="info-label">鏈</span>
+    <span class="info-value">${chains.join(", ")}</span>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Render H-Bond Table
+// ═══════════════════════════════════════════════════════════════════════════
+function hbClass(d) {
+  if (d<=2.5) return ["hb-strong","強"];
+  if (d<=3.2) return ["hb-medium","中"];
+  return ["hb-weak","弱"];
+}
+
+function renderHBondTable() {
+  if (!hbonds.length) {
+    document.getElementById("hbond-table-wrap").innerHTML =
+      "<p style='color:var(--sub);padding:.5rem'>未偵測到氫鍵（嘗試增大截斷距離）</p>";
+    return;
+  }
+  let rows = hbonds.map(hb => {
+    const [cls, label] = hbClass(hb.distance);
+    return `<tr>
+      <td><span class="atom-tag">${hb.ligResName}:${hb.ligAtom}</span> (${hb.ligElem})</td>
+      <td><strong>${hb.protResName}${hb.protResSeq}</strong>
+          <span style="font-size:.75rem;color:var(--sub)"> Ch.${hb.protChain}</span></td>
+      <td><span class="atom-tag">${hb.protAtom}</span> (${hb.protElem})</td>
+      <td><span class="dist-pill ${cls}">${hb.distance.toFixed(3)} Å</span></td>
+      <td style="color:var(--sub);font-size:.8rem">${label}氫鍵</td>
+    </tr>`;
+  }).join("");
+
+  document.getElementById("hbond-table-wrap").innerHTML = `
+    <table>
+      <thead><tr>
+        <th>配體原子</th><th>蛋白質殘基</th><th>蛋白質原子</th>
+        <th>距離</th><th>類型</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Render Mutations
+// ═══════════════════════════════════════════════════════════════════════════
+function renderMutations() {
+  const hbKeys = new Set(hbonds.map(h=>`${h.protChain}_${h.protResSeq}`));
+  let html = "";
+
+  // High priority: H-bond residues
+  const hbUniq = new Map();
+  for (const hb of hbonds) {
+    const k = `${hb.protChain}_${hb.protResSeq}`;
+    if (!hbUniq.has(k) || hb.distance < hbUniq.get(k).distance)
+      hbUniq.set(k, hb);
+  }
+  for (const [, hb] of hbUniq) {
+    const hint = MUTATION_HINTS[hb.protResName] || `${hb.protResName}→Ala 移除側鏈功能基`;
+    html += `
+      <div class="mut-item priority-high">
+        <div class="mut-header">
+          <span class="mut-resname">${hb.protResName}${hb.protResSeq}
+            <span style="font-size:.78rem;color:var(--sub)"> (Ch.${hb.protChain})</span>
+            <span class="mut-dist">${hb.distance.toFixed(2)} Å</span></span>
+          <span class="priority-badge badge-high">高優先</span>
+        </div>
+        <div class="mut-role">直接氫鍵交互作用</div>
+        <div class="mut-sugg">💡 ${hint}</div>
+      </div>`;
+  }
+
+  // Medium priority: nearby but no H-bond
+  let count = 0;
+  for (const r of nearbyRes) {
+    const k = `${r.chain}_${r.resSeq}`;
+    if (hbKeys.has(k)) continue;
+    if (++count > 8) break;
+    const hint = MUTATION_HINTS[r.resName] || `${r.resName}→Ala 探索空間效應`;
+    html += `
+      <div class="mut-item priority-mid">
+        <div class="mut-header">
+          <span class="mut-resname">${r.resName}${r.resSeq}
+            <span style="font-size:.78rem;color:var(--sub)"> (Ch.${r.chain})</span></span>
+          <span class="priority-badge badge-mid">中優先</span>
+        </div>
+        <div class="mut-role">近鄰殘基（${r.minDist.toFixed(2)} Å，無直接氫鍵）</div>
+        <div class="mut-sugg">💡 ${hint}</div>
+      </div>`;
+  }
+
+  document.getElementById("mutation-grid").innerHTML = html || "<p style='color:var(--sub)'>無資料</p>";
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Render Nearby Residues
+// ═══════════════════════════════════════════════════════════════════════════
+function renderNearby() {
+  const hbKeys = new Set(hbonds.map(h=>`${h.protChain}_${h.protResSeq}`));
+  let html = nearbyRes.map(r => {
+    const isHB  = hbKeys.has(`${r.chain}_${r.resSeq}`);
+    const cls   = isHB ? "chip chip-hb" : "chip chip-contact";
+    const title = isHB ? `氫鍵殘基 | ${r.minDist} Å` : `接觸殘基 | ${r.minDist} Å`;
+    return `<span class="${cls}" title="${title}"
+              onclick="highlightResidue('${r.chain}',${r.resSeq})">
+              ${r.resName}${r.resSeq}${isHB?" ⚡":""}
+            </span>`;
+  }).join("");
+  document.getElementById("residue-chips").innerHTML = html;
+}
+
+function highlightResidue(chain, resSeq) {
+  if (!viewer) return;
+  viewer.addStyle(
+    {chain, resi:resSeq, hetflag:false},
+    {stick:{colorscheme:"greenCarbon", radius:0.2}}
+  );
+  viewer.zoomTo({chain, resi:resSeq}, 500);
+  viewer.render();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Input Handlers
+// ═══════════════════════════════════════════════════════════════════════════
+async function fetchAndAnalyze() {
+  const id      = document.getElementById("pdb-id-input").value.trim().toUpperCase();
+  const ligName = document.getElementById("lig-input").value.trim().toUpperCase();
+  const cutoff  = parseFloat(document.getElementById("cutoff-input").value) || 3.5;
+  const chain   = document.getElementById("chain-input").value.trim().toUpperCase();
+
+  if (!id) { showError("請輸入 PDB ID"); return; }
+  if (!/^[A-Z0-9]{1,8}$/.test(id)) { showError("PDB ID 格式不正確（1–8 字母數字）"); return; }
+
+  hideError();
+  setFetchBtn(true);
+  showStatus("從 RCSB PDB 下載 " + id + " ...");
+
+  try {
+    const raw = await fetchPDB(id);
+    pdbData = raw;
+    pdbId   = id;
+    await runAnalysis(id, raw, ligName, cutoff, chain);
+  } catch(e) {
+    showError(e.message || String(e));
+    hideStatus();
+  } finally {
+    setFetchBtn(false);
+  }
+}
+
+function handleFile(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  readFile(file);
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById("upload-zone").classList.remove("drag-over");
+  const file = e.dataTransfer.files[0];
+  if (file) readFile(file);
+}
+
+function readFile(file) {
+  const ligName = document.getElementById("lig-input").value.trim().toUpperCase();
+  const cutoff  = parseFloat(document.getElementById("cutoff-input").value) || 3.5;
+  const chain   = document.getElementById("chain-input").value.trim().toUpperCase();
+
+  showStatus(`讀取 ${file.name}...`);
+  hideError();
+  const reader = new FileReader();
+  reader.onload = async e => {
+    try {
+      pdbData = e.target.result;
+      pdbId   = file.name.replace(/\.pdb|\.ent/i,"").toUpperCase();
+      document.getElementById("upload-zone").textContent = `✓ ${file.name}`;
+      await runAnalysis(pdbId, pdbData, ligName, cutoff, chain);
+    } catch(err) {
+      showError(err.message || String(err));
+      hideStatus();
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Export
+// ═══════════════════════════════════════════════════════════════════════════
+function exportHTML() {
+  const cutoff = parseFloat(document.getElementById("cutoff-input").value) || 3.5;
+  const pdbJs  = pdbData.replace(/`/g,"\\`").replace(/\\/g,"\\\\");
+  const date   = new Date().toLocaleDateString("zh-TW");
+
+  // H-bond table
+  let hbRows = hbonds.map(hb => {
+    const [cls, lbl] = hbClass(hb.distance);
+    return `<tr>
+      <td>${hb.ligResName}:${hb.ligAtom} (${hb.ligElem})</td>
+      <td>${hb.protResName}${hb.protResSeq} (Ch.${hb.protChain})</td>
+      <td>${hb.protAtom} (${hb.protElem})</td>
+      <td><span class="dist-pill ${cls}">${hb.distance.toFixed(3)} Å</span></td>
+      <td>${lbl}氫鍵</td></tr>`;
+  }).join("");
+
+  // Mutation cards
+  const hbKeys = new Set(hbonds.map(h=>`${h.protChain}_${h.protResSeq}`));
+  const hbUniq = new Map();
+  for (const hb of hbonds) {
+    const k=`${hb.protChain}_${hb.protResSeq}`;
+    if(!hbUniq.has(k)||hb.distance<hbUniq.get(k).distance) hbUniq.set(k,hb);
+  }
+  let mutHtml = "";
+  for (const [,hb] of hbUniq) {
+    const hint = MUTATION_HINTS[hb.protResName]||`${hb.protResName}→Ala`;
+    mutHtml += `<div class="mut-item priority-high">
+      <strong>${hb.protResName}${hb.protResSeq}</strong> (Ch.${hb.protChain}) – ${hb.distance.toFixed(3)} Å<br>
+      <em>直接氫鍵</em><br>💡 ${hint}</div>`;
+  }
+  let cnt=0;
+  for (const r of nearbyRes) {
+    if(hbKeys.has(`${r.chain}_${r.resSeq}`)) continue;
+    if(++cnt>6) break;
+    const hint = MUTATION_HINTS[r.resName]||`${r.resName}→Ala`;
+    mutHtml += `<div class="mut-item priority-mid">
+      <strong>${r.resName}${r.resSeq}</strong> (Ch.${r.chain}) – ${r.minDist} Å<br>
+      <em>近鄰殘基</em><br>💡 ${hint}</div>`;
+  }
+
+  const nUniq = new Set(hbonds.map(h=>`${h.protChain}${h.protResSeq}`)).size;
+
+  const html = `<!DOCTYPE html><html lang="zh-TW"><head>
+<meta charset="UTF-8"><title>HB Report – ${pdbId}</title>
+<script src="https://3dmol.org/build/3Dmol-min.js"><\/script>
+<style>
+:root{--blue:#2563eb;--blue-light:#eff6ff;--border:#e2e8f0;--sub:#64748b;--text:#1e293b}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#f1f5f9;color:var(--text)}
+header{background:linear-gradient(135deg,#1e3a5f,var(--blue));color:#fff;padding:1.5rem 2rem}
+header h1{font-size:1.5rem;font-weight:700}
+.wrap{max-width:1100px;margin:0 auto;padding:1.5rem}
+.card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:1.25rem;margin-bottom:1.25rem}
+.card h2{font-size:.95rem;font-weight:700;color:var(--blue);margin-bottom:.75rem;
+         border-bottom:2px solid var(--border);padding-bottom:.4rem}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.25rem}
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem}
+.stat-box{background:var(--blue-light);border-radius:8px;text-align:center;padding:.8rem}
+.stat-val{font-size:2rem;font-weight:800;color:var(--blue)}
+.stat-lbl{font-size:.72rem;color:var(--sub)}
+#viewer{width:100%;height:400px;border-radius:8px;overflow:hidden;background:#0f1923}
+table{width:100%;border-collapse:collapse;font-size:.85rem}
+th{background:var(--blue-light);padding:.5rem .7rem;text-align:left;font-weight:700;
+   border-bottom:2px solid var(--border);font-size:.78rem}
+td{padding:.4rem .7rem;border-bottom:1px solid var(--border)}
+.dist-pill{display:inline-block;padding:.12rem .5rem;border-radius:999px;font-size:.78rem;font-weight:700}
+.hb-strong{background:#dcfce7;color:#14532d}
+.hb-medium{background:#fef9c3;color:#713f12}
+.hb-weak{background:#fee2e2;color:#7f1d1d}
+.mut-item{border-left:4px solid var(--blue);background:#f8fafc;border-radius:0 8px 8px 0;
+          padding:.8rem 1rem;margin-bottom:.6rem;font-size:.85rem}
+.priority-high{border-color:#dc2626}
+.priority-mid{border-color:#ea580c}
+.mut-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.75rem}
+footer{text-align:center;padding:1rem;color:var(--sub);font-size:.78rem;border-top:1px solid var(--border)}
+</style></head><body>
+<header>
+  <h1>🔬 蛋白質–配體氫鍵交互作用分析報告</h1>
+  <p>PDB：<strong>${pdbId}</strong> ｜ 配體：<strong>${ligResname}</strong> ｜ 日期：${date}</p>
+</header>
+<div class="wrap">
+  <div class="card">
+    <h2>📊 摘要</h2>
+    <div class="stat-grid">
+      <div class="stat-box"><div class="stat-val">${hbonds.length}</div><div class="stat-lbl">氫鍵對數</div></div>
+      <div class="stat-box"><div class="stat-val">${nUniq}</div><div class="stat-lbl">氫鍵殘基</div></div>
+      <div class="stat-box"><div class="stat-val">${nearbyRes.length}</div><div class="stat-lbl">近鄰殘基</div></div>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="card"><h2>🧬 3D 視覺化</h2><div id="viewer"></div></div>
+    <div class="card"><h2>⚡ 氫鍵清單</h2>
+      <table><thead><tr><th>配體原子</th><th>蛋白質殘基</th><th>蛋白質原子</th><th>距離</th><th>類型</th></tr></thead>
+      <tbody>${hbRows}</tbody></table>
+    </div>
+  </div>
+  <div class="card"><h2>🧪 突變位點分析</h2><div class="mut-grid">${mutHtml}</div></div>
+</div>
+<footer>PyMOL HB Interaction Analyzer ｜ ${date}</footer>
+<script>
+const PDB=\`${pdbJs}\`;
+const HBS=${JSON.stringify(hbonds)};
+const LIG="${ligResname}";
+(function(){
+  const v=$3Dmol.createViewer(document.getElementById('viewer'),{backgroundColor:'#0f1923'});
+  v.addModel(PDB,'pdb');
+  v.setStyle({hetflag:false},{cartoon:{colorscheme:'spectrum',opacity:.85}});
+  v.setStyle({resn:LIG},{stick:{colorscheme:'default',radius:.22}});
+  v.setStyle({resn:'HOH'},{});v.setStyle({resn:'WAT'},{});
+  for(const h of HBS) v.addCylinder({
+    start:{x:h.ligXYZ[0],y:h.ligXYZ[1],z:h.ligXYZ[2]},
+    end:{x:h.protXYZ[0],y:h.protXYZ[1],z:h.protXYZ[2]},
+    radius:.07,color:'#facc15',dashed:true,fromCap:2,toCap:2
+  });
+  const seen=new Set();
+  for(const h of HBS){
+    const k=h.protChain+h.protResSeq;
+    if(seen.has(k)) continue; seen.add(k);
+    v.addLabel(h.protResName+h.protResSeq+'\\n'+h.distance.toFixed(2)+'Å',{
+      position:{x:h.protXYZ[0],y:h.protXYZ[1],z:h.protXYZ[2]},
+      backgroundColor:'rgba(30,58,95,.9)',fontColor:'#fff',fontSize:11,padding:3});
+  }
+  v.zoomTo({resn:LIG});v.render();
+})();
+<\/script></body></html>`;
+
+  const blob = new Blob([html], {type:"text/html"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${pdbId}_hb_report.html`;
+  a.click();
+}
+
+function exportJSON() {
+  const data = {
+    pdb_id:pdbId, ligand:ligResname,
+    date: new Date().toISOString(),
+    hbonds, nearby:nearbyRes,
+    stats:{n_hbonds:hbonds.length, n_nearby:nearbyRes.length}
+  };
+  const blob = new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download=`${pdbId}_hb_data.json`; a.click();
+}
+
+function exportCSV() {
+  let csv="配體原子,配體元素,蛋白質殘基,蛋白質Chain,蛋白質原子,蛋白質元素,距離(Å),類型\n";
+  for(const hb of hbonds) {
+    const [,lbl]=hbClass(hb.distance);
+    csv+=`"${hb.ligResName}:${hb.ligAtom}","${hb.ligElem}",`+
+         `"${hb.protResName}${hb.protResSeq}","${hb.protChain}",`+
+         `"${hb.protAtom}","${hb.protElem}",${hb.distance},"${lbl}氫鍵"\n`;
+  }
+  const blob=new Blob(["﻿"+csv],{type:"text/csv"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download=`${pdbId}_hbonds.csv`; a.click();
+}
+
+function copyPyMOL() {
+  const box = document.getElementById("pymol-cmd-box");
+  const textarea = document.getElementById("pymol-cmds");
+  const cutoff = parseFloat(document.getElementById("cutoff-input").value)||3.5;
+
+  let cmds = `# PyMOL 指令 – ${pdbId}  配體：${ligResname}\n`;
+  cmds += `# 生成日期：${new Date().toLocaleString("zh-TW")}\n\n`;
+  cmds += `fetch ${pdbId}, async=0\n`;
+  cmds += `remove resn HOH+WAT\n\n`;
+  cmds += `# 視覺化\nhide everything\n`;
+  cmds += `show cartoon, polymer\ncolor spectrum, polymer\n\n`;
+  cmds += `# 配體\nshow sticks, resn ${ligResname}\ncolor yellow, resn ${ligResname}\n\n`;
+  cmds += `# 氫鍵殘基（橘色高亮）\n`;
+  const hbUniq = new Map();
+  for(const hb of hbonds){
+    const k=`${hb.protChain}_${hb.protResSeq}`;
+    if(!hbUniq.has(k)) hbUniq.set(k,hb);
+  }
+  for(const [,hb] of hbUniq){
+    cmds += `show sticks, chain ${hb.protChain} and resi ${hb.protResSeq}\n`;
+    cmds += `color tv_orange, chain ${hb.protChain} and resi ${hb.protResSeq}\n`;
+    cmds += `label (chain ${hb.protChain} and resi ${hb.protResSeq} and name CA), "${hb.protResName}${hb.protResSeq}\\n${hb.distance}Å"\n`;
+  }
+  cmds += `\n# 氫鍵距離標記\n`;
+  for(let i=0;i<Math.min(hbonds.length,10);i++){
+    const hb=hbonds[i];
+    cmds += `distance hb${i+1}, (resn ${ligResname} and name ${hb.ligAtom}), (chain ${hb.protChain} and resi ${hb.protResSeq} and name ${hb.protAtom})\n`;
+  }
+  cmds += `\n# 美化\nbg_color black\nset cartoon_fancy_helices, 1\nset ray_shadows, 0\n`;
+  cmds += `zoom resn ${ligResname}, 8\n\n`;
+  cmds += `# 匯出圖像\nray 2400, 1800\npng ${pdbId}_hb_analysis.png, dpi=300\n`;
+
+  textarea.value = cmds;
+  box.style.display = box.style.display==="none" ? "block" : "none";
+
+  if(box.style.display==="block"){
+    navigator.clipboard?.writeText(cmds).then(()=>{
+      // copied
+    }).catch(()=>{});
+    textarea.select();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UI helpers
+// ═══════════════════════════════════════════════════════════════════════════
+function showStatus(msg) {
+  const bar = document.getElementById("status-bar");
+  document.getElementById("status-text").textContent = msg;
+  bar.classList.add("show");
+}
+function setStatus(msg) { document.getElementById("status-text").textContent = msg; }
+function hideStatus()   { document.getElementById("status-bar").classList.remove("show"); }
+function showError(msg) {
+  const el = document.getElementById("error-banner");
+  el.textContent = "⚠ " + msg;
+  el.style.display = "block";
+}
+function hideError() { document.getElementById("error-banner").style.display = "none"; }
+function setFetchBtn(dis) {
+  const b = document.getElementById("fetch-btn");
+  b.disabled = dis;
+  b.textContent = dis ? "⏳ 分析中..." : "🔍 載入 & 分析";
+}
+
+// Enter key on PDB ID input
+document.getElementById("pdb-id-input")
+  .addEventListener("keydown", e => { if(e.key==="Enter") fetchAndAnalyze(); });
+</script>
+</body>
+</html>
