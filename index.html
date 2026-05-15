@@ -207,7 +207,7 @@ tr:hover td{background:#f8fafc}
       </div>
       <div class="field-group" style="max-width:130px">
         <label>H-Bond 上限 (Å)</label>
-        <input type="text" id="cutoff-input" value="3.5" style="font-family:monospace">
+        <input type="text" id="cutoff-input" value="3.6" style="font-family:monospace">
       </div>
       <div class="field-group" style="max-width:160px">
         <label>Chain（選填）</label>
@@ -907,7 +907,7 @@ function highlightResidue(chain, resSeq) {
 async function fetchAndAnalyze() {
   const id      = document.getElementById("pdb-id-input").value.trim().toUpperCase();
   const ligName = document.getElementById("lig-input").value.trim(); // 保留原始大小寫
-  const cutoff  = parseFloat(document.getElementById("cutoff-input").value) || 3.5;
+  const cutoff  = parseFloat(document.getElementById("cutoff-input").value) || 3.6;
   const chain   = document.getElementById("chain-input").value.trim().toUpperCase();
 
   // 如果沒有 PDB ID，但有已上傳的檔案 → 直接用上傳資料
@@ -967,7 +967,7 @@ function handleDrop(e) {
 
 function readFile(file) {
   const ligName = document.getElementById("lig-input").value.trim(); // 保留原始大小寫
-  const cutoff  = parseFloat(document.getElementById("cutoff-input").value) || 3.5;
+  const cutoff  = parseFloat(document.getElementById("cutoff-input").value) || 3.6;
   const chain   = document.getElementById("chain-input").value.trim().toUpperCase();
 
   showStatus(`讀取 ${file.name}...`);
@@ -1116,7 +1116,7 @@ function buildPrintContainer() {
           </div>`).join("")}
       </div>
       <div style="margin-bottom:22px">
-        ${sectionTitle("⚡","氫鍵交互作用清單（D–A ≤ 3.5 Å）")}
+        ${sectionTitle("⚡","氫鍵交互作用清單（D–A ≤ 3.6 Å）")}
         <table style="width:100%;border-collapse:collapse;font-size:12px">
           <thead><tr>
             <th style="${thStyle}">配體原子</th><th style="${thStyle}">蛋白質殘基</th>
@@ -1351,7 +1351,7 @@ function exportCSV() {
 function copyPyMOL() {
   const box = document.getElementById("pymol-cmd-box");
   const textarea = document.getElementById("pymol-cmds");
-  const cutoff = parseFloat(document.getElementById("cutoff-input").value)||3.5;
+  const cutoff = parseFloat(document.getElementById("cutoff-input").value)||3.6;
   let cmds = `# PyMOL 指令 – ${pdbId}  配體：${ligResname}\n`;
   cmds += `# 生成日期：${new Date().toLocaleString("zh-TW")}\n\n`;
   cmds += `fetch ${pdbId}, async=0\nremove resn HOH+WAT\n\n`;
