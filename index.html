@@ -228,7 +228,7 @@ tr:hover td{background:#f8fafc}
          ondragleave="this.classList.remove('drag-over')"
          ondrop="handleDrop(event)">
       <input type="file" id="file-input" accept=".pdb,.ent" onchange="handleFile(event)">
-      📂 點此或拖曳上傳 .pdb / .ent 檔案
+      <span id="upload-zone-label">📂 點此或拖曳上傳 .pdb / .ent 檔案</span>
     </div>
   </div>
 
@@ -854,12 +854,14 @@ function readFile(file) {
       uploadedFileName = file.name;
       pdbData = uploadedPdbText;
       pdbId   = file.name.replace(/\.pdb|\.ent/i,"").toUpperCase();
-      // 更新上傳區：顯示檔名並提示可調整參數後重新分析
-      document.getElementById("upload-zone").innerHTML =
+      // 只更新文字 span，保留 <input> 元素讓使用者可再次點擊上傳
+      document.getElementById("upload-zone-label").innerHTML =
         `✅ <strong>${file.name}</strong> &nbsp;
          <span style="font-size:.8rem;color:var(--blue)">
-           已上傳 — 調整上方參數後可再點「載入 & 分析」重新分析
+           （點此可更換檔案）
          </span>`;
+      // 重設 input value，確保選同一個檔案時仍會觸發 onchange
+      document.getElementById("file-input").value = "";
       await runAnalysis(pdbId, pdbData, ligName, cutoff, chain);
     } catch(err) {
       showError(err.message || String(err));
