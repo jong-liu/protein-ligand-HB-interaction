@@ -203,7 +203,7 @@ tr:hover td{background:#f8fafc}
       <div class="field-group" style="max-width:160px">
         <label>配體 ResName（選填）</label>
         <input type="text" id="lig-input" placeholder="自動偵測" maxlength="6"
-               style="text-transform:uppercase;font-family:monospace">
+               style="font-family:monospace">
       </div>
       <div class="field-group" style="max-width:130px">
         <label>H-Bond 上限 (Å)</label>
@@ -507,9 +507,15 @@ async function runAnalysis(id, rawPdb, ligName, cutoff, chainFilter) {
   const ligands = detectLigands(allAtoms);
   if (!ligands.length) throw new Error("未找到配體（非水 HETATM 記錄）");
 
-  ligResname = (ligName || ligands[0]).toUpperCase();
-  if (!ligands.includes(ligResname))
-    throw new Error(`配體 '${ligResname}' 不在結構中。偵測到：${ligands.join(", ")}`);
+  // 大小寫不敏感匹配：找到 PDB 裡的原始名稱
+  if (ligName) {
+    const matched = ligands.find(l => l.toLowerCase() === ligName.toLowerCase());
+    if (!matched)
+      throw new Error(`配體 '${ligName}' 不在結構中。偵測到：${ligands.join(", ")}`);
+    ligResname = matched; // 使用 PDB 裡的原始大小寫
+  } else {
+    ligResname = ligands[0];
+  }
 
   // Chain filter
   let atoms = allAtoms;
@@ -780,7 +786,7 @@ function highlightResidue(chain, resSeq) {
 // ═══════════════════════════════════════════════════════════════════════════
 async function fetchAndAnalyze() {
   const id      = document.getElementById("pdb-id-input").value.trim().toUpperCase();
-  const ligName = document.getElementById("lig-input").value.trim().toUpperCase();
+  const ligName = document.getElementById("lig-input").value.trim(); // 保留原始大小寫
   const cutoff  = parseFloat(document.getElementById("cutoff-input").value) || 3.5;
   const chain   = document.getElementById("chain-input").value.trim().toUpperCase();
 
@@ -840,7 +846,7 @@ function handleDrop(e) {
 }
 
 function readFile(file) {
-  const ligName = document.getElementById("lig-input").value.trim().toUpperCase();
+  const ligName = document.getElementById("lig-input").value.trim(); // 保留原始大小寫
   const cutoff  = parseFloat(document.getElementById("cutoff-input").value) || 3.5;
   const chain   = document.getElementById("chain-input").value.trim().toUpperCase();
 
