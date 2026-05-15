@@ -301,6 +301,9 @@ tr:hover td{background:#f8fafc}
       <div class="section-title">📄 報告匯出</div>
       <div class="report-actions">
         <button class="btn btn-primary" onclick="exportHTML()">💾 下載 HTML 報告</button>
+        <button class="btn btn-primary" onclick="exportPDF()" id="pdf-btn"
+                style="background:#dc2626" onmouseover="this.style.background='#b91c1c'"
+                onmouseout="this.style.background='#dc2626'">📄 下載 PDF</button>
         <button class="btn btn-secondary" onclick="exportJSON()">📋 下載 JSON 資料</button>
         <button class="btn btn-secondary" onclick="exportCSV()">📊 下載 CSV</button>
         <button class="btn btn-secondary" onclick="copyPyMOL()">📋 複製 PyMOL 指令</button>
@@ -1002,23 +1005,217 @@ function readFile(file) {
 // ═══════════════════════════════════════════════════════════════════════════
 // Export
 // ═══════════════════════════════════════════════════════════════════════════
-function exportHTML() {
-  const cutoff = parseFloat(document.getElementById("cutoff-input").value) || 3.5;
-  const pdbJs  = pdbData.replace(/`/g,"\\`").replace(/\\/g,"\\\\");
-  const date   = new Date().toLocaleDateString("zh-TW");
+// ═══════════════════════════════════════════════════════════════════════════
+// PDF Export
+// ═══════════════════════════════════════════════════════════════════════════
 
-  // H-bond table
+function loadScriptIfNeeded(url, checkFn) {
+  if (checkFn()) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = url;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error("無法載入函式庫：" + url));
+    document.head.appendChild(s);
+  });
+}
+
+function buildPrintContainer() {
+  const nUniq = new Set(hbonds.map(h => `${h.protChain}${h.protResSeq}`)).size;
+  const date  = new Date().toLocaleDateString("zh-TW");
+
+  // H-bond 表格列
+  const hbRows = hbonds.map((hb, idx) => {
+    const [, lbl] = hbClass(hb.distance);
+    const bg = hb.distance <= 2.5 ? "#dcfce7" : hb.distance <= 3.2 ? "#fef9c3" : "#fee2e2";
+    const rowBg = idx % 2 === 0 ? "#ffffff" : "#f8fafc";
+    return `<tr style="background:${rowBg}">
+      <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0">${hb.ligResName}:${hb.ligAtom} (${hb.ligElem})</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0"><strong>${hb.protResName}${hb.protResSeq}</strong></td>
+      <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0">${hb.protChain}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0">${hb.protAtom} (${hb.protElem})</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0">
+        <span style="background:${bg};padding:2px 7px;border-radius:4px;font-weight:700">${hb.distance.toFixed(3)} Å</span>
+      </td>
+      <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0">${lbl}氫鍵</td>
+    </tr>`;
+  }).join("");
+
+  // 突變分析
+  const hbKeys = new Set(hbonds.map(h => `${h.protChain}_${h.protResSeq}`));
+  const hbUniq = new Map();
+  for (const hb of hbonds) {
+    const k = `${hb.protChain}_${hb.protResSeq}`;
+    if (!hbUniq.has(k) || hb.distance < hbUniq.get(k).distance) hbUniq.set(k, hb);
+  }
+  let mutHtml = "";
+  for (const [, hb] of hbUniq) {
+    const hint = MUTATION_HINTS[hb.protResName] || `${hb.protResName}→Ala`;
+    mutHtml += `<div style="border-left:4px solid #dc2626;background:#fff5f5;
+                            padding:8px 12px;margin-bottom:6px;border-radius:0 6px 6px 0">
+      <div style="font-weight:700;font-size:12px">${hb.protResName}${hb.protResSeq}
+        (Ch.${hb.protChain}) &nbsp;
+        <span style="background:#dcfce7;color:#14532d;padding:1px 5px;border-radius:3px;font-size:11px">${hb.distance.toFixed(3)} Å</span>
+        &nbsp;<span style="background:#fee2e2;color:#b91c1c;font-size:10px;padding:1px 5px;border-radius:3px">高優先</span>
+      </div>
+      <div style="color:#666;font-size:11px;margin:2px 0">直接氫鍵交互作用</div>
+      <div style="font-size:11px">💡 ${hint}</div>
+    </div>`;
+  }
+  let cnt = 0;
+  for (const r of nearbyRes) {
+    if (hbKeys.has(`${r.chain}_${r.resSeq}`)) continue;
+    if (++cnt > 8) break;
+    const hint = MUTATION_HINTS[r.resName] || `${r.resName}→Ala`;
+    mutHtml += `<div style="border-left:4px solid #ea580c;background:#fff7ed;
+                            padding:8px 12px;margin-bottom:6px;border-radius:0 6px 6px 0">
+      <div style="font-weight:700;font-size:12px">${r.resName}${r.resSeq}
+        (Ch.${r.chain}) &nbsp;
+        <span style="background:#fef3c7;color:#92400e;font-size:10px;padding:1px 5px;border-radius:3px">中優先</span>
+      </div>
+      <div style="color:#666;font-size:11px;margin:2px 0">近鄰殘基（${r.minDist} Å）</div>
+      <div style="font-size:11px">💡 ${hint}</div>
+    </div>`;
+  }
+
+  // 近鄰殘基表格
+  const nearbyRows = nearbyRes.map((r, idx) => {
+    const isHB = hbKeys.has(`${r.chain}_${r.resSeq}`);
+    const rowBg = idx % 2 === 0 ? "#ffffff" : "#f8fafc";
+    return `<tr style="background:${rowBg}">
+      <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0">${r.resName}${r.resSeq} (${r.one})</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0">${r.chain}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0">${r.minDist.toFixed(3)}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #e2e8f0">${isHB ? "⚡ 氫鍵殘基" : "接觸殘基"}</td>
+    </tr>`;
+  }).join("");
+
+  const thStyle = "padding:6px 8px;text-align:left;background:#eff6ff;border-bottom:2px solid #bfdbfe;font-weight:700;font-size:12px;color:#1e3a5f";
+  const sectionTitle = (icon, text) =>
+    `<div style="font-weight:700;font-size:14px;color:#1e3a5f;
+                 border-bottom:2px solid #e2e8f0;padding-bottom:5px;margin-bottom:10px">
+       ${icon} ${text}
+     </div>`;
+
+  const div = document.createElement("div");
+  div.style.cssText = "position:fixed;left:-9999px;top:0;width:794px;background:white;" +
+                      "font-family:'Microsoft JhengHei',Arial,sans-serif;color:#1e293b;padding:0";
+  div.innerHTML = `
+    <div style="background:#2563eb;color:white;padding:22px 30px">
+      <div style="font-size:19px;font-weight:700">🔬 蛋白質–配體氫鍵交互作用分析報告</div>
+      <div style="opacity:.85;margin-top:5px;font-size:12px">
+        PDB：<strong>${pdbId}</strong> ｜ 配體：<strong>${ligResname}</strong> ｜ 日期：${date}
+      </div>
+    </div>
+    <div style="padding:20px 30px">
+      <div style="display:flex;gap:10px;margin-bottom:20px">
+        ${[{v:hbonds.length,l:"氫鍵對數"},{v:nUniq,l:"氫鍵殘基數"},{v:nearbyRes.length,l:"近鄰殘基（5 Å）"}]
+          .map(s=>`<div style="flex:1;background:#eff6ff;border-radius:8px;text-align:center;padding:12px 8px">
+            <div style="font-size:26px;font-weight:800;color:#2563eb">${s.v}</div>
+            <div style="font-size:11px;color:#64748b;margin-top:3px">${s.l}</div>
+          </div>`).join("")}
+      </div>
+      <div style="margin-bottom:22px">
+        ${sectionTitle("⚡","氫鍵交互作用清單（D–A ≤ 3.5 Å）")}
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr>
+            <th style="${thStyle}">配體原子</th><th style="${thStyle}">蛋白質殘基</th>
+            <th style="${thStyle}">鏈</th><th style="${thStyle}">蛋白質原子</th>
+            <th style="${thStyle}">距離 (Å)</th><th style="${thStyle}">類型</th>
+          </tr></thead>
+          <tbody>${hbRows}</tbody>
+        </table>
+      </div>
+      <div style="margin-bottom:22px">
+        ${sectionTitle("🧪","突變位點分析")}
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">${mutHtml}</div>
+      </div>
+      <div style="margin-bottom:16px">
+        ${sectionTitle("🔍","近鄰殘基（5 Å）")}
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead><tr>
+            <th style="${thStyle}">殘基</th><th style="${thStyle}">鏈</th>
+            <th style="${thStyle}">最近距離 (Å)</th><th style="${thStyle}">角色</th>
+          </tr></thead>
+          <tbody>${nearbyRows}</tbody>
+        </table>
+      </div>
+      <div style="text-align:center;color:#94a3b8;font-size:11px;
+                  border-top:1px solid #e2e8f0;padding-top:12px;margin-top:8px">
+        PyMOL HB Interaction Analyzer ｜ ${date}
+      </div>
+    </div>
+  `;
+  return div;
+}
+
+async function exportPDF() {
+  if (!allAtoms.length) { showError("尚無分析結果可匯出"); return; }
+  const btn = document.getElementById("pdf-btn");
+  btn.disabled = true;
+  btn.textContent = "⏳ 生成中...";
+  showStatus("載入 PDF 函式庫，請稍候...");
+  try {
+    await loadScriptIfNeeded(
+      "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js",
+      () => typeof html2canvas !== "undefined"
+    );
+    await loadScriptIfNeeded(
+      "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
+      () => typeof window.jspdf !== "undefined"
+    );
+    setStatus("渲染報告內容...");
+    const container = buildPrintContainer();
+    document.body.appendChild(container);
+    await new Promise(r => setTimeout(r, 300));
+    setStatus("擷取頁面為圖片...");
+    const canvas = await html2canvas(container, {
+      scale: 2, useCORS: true, backgroundColor: "#ffffff",
+      logging: false, windowWidth: 794,
+    });
+    document.body.removeChild(container);
+    setStatus("組合 PDF 頁面...");
+    const { jsPDF } = window.jspdf;
+    const pdf     = new jsPDF("p", "mm", "a4");
+    const pageW   = pdf.internal.pageSize.getWidth();
+    const pageH   = pdf.internal.pageSize.getHeight();
+    const margin  = 8;
+    const imgW    = pageW - margin * 2;
+    const pxPerMm = canvas.width / imgW;
+    const sliceHpx = (pageH - margin * 2) * pxPerMm;
+    let srcY = 0, firstPage = true;
+    while (srcY < canvas.height) {
+      if (!firstPage) pdf.addPage();
+      firstPage = false;
+      const sliceH = Math.min(sliceHpx, canvas.height - srcY);
+      const sc = document.createElement("canvas");
+      sc.width = canvas.width; sc.height = sliceH;
+      sc.getContext("2d").drawImage(canvas, 0, srcY, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+      pdf.addImage(sc.toDataURL("image/jpeg", 0.92), "JPEG", margin, margin, imgW, sliceH / pxPerMm);
+      srcY += sliceH;
+    }
+    pdf.save(`${pdbId}_hb_report.pdf`);
+    hideStatus();
+  } catch(e) {
+    showError("PDF 生成失敗：" + (e.message || String(e)));
+    hideStatus();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "📄 下載 PDF";
+  }
+}
+
+function exportHTML() {
+  const pdbJs = pdbData.replace(/`/g,"\\`").replace(/\\/g,"\\\\");
+  const date  = new Date().toLocaleDateString("zh-TW");
   let hbRows = hbonds.map(hb => {
     const [cls, lbl] = hbClass(hb.distance);
-    return `<tr>
-      <td>${hb.ligResName}:${hb.ligAtom} (${hb.ligElem})</td>
+    return `<tr><td>${hb.ligResName}:${hb.ligAtom} (${hb.ligElem})</td>
       <td>${hb.protResName}${hb.protResSeq} (Ch.${hb.protChain})</td>
       <td>${hb.protAtom} (${hb.protElem})</td>
       <td><span class="dist-pill ${cls}">${hb.distance.toFixed(3)} Å</span></td>
       <td>${lbl}氫鍵</td></tr>`;
   }).join("");
-
-  // Mutation cards
   const hbKeys = new Set(hbonds.map(h=>`${h.protChain}_${h.protResSeq}`));
   const hbUniq = new Map();
   for (const hb of hbonds) {
@@ -1041,9 +1238,7 @@ function exportHTML() {
       <strong>${r.resName}${r.resSeq}</strong> (Ch.${r.chain}) – ${r.minDist} Å<br>
       <em>近鄰殘基</em><br>💡 ${hint}</div>`;
   }
-
   const nUniq = new Set(hbonds.map(h=>`${h.protChain}${h.protResSeq}`)).size;
-
   const html = `<!DOCTYPE html><html lang="zh-TW"><head>
 <meta charset="UTF-8"><title>HB Report – ${pdbId}</title>
 <script src="https://3dmol.org/build/3Dmol-min.js"><\/script>
@@ -1055,8 +1250,7 @@ header{background:linear-gradient(135deg,#1e3a5f,var(--blue));color:#fff;padding
 header h1{font-size:1.5rem;font-weight:700}
 .wrap{max-width:1100px;margin:0 auto;padding:1.5rem}
 .card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:1.25rem;margin-bottom:1.25rem}
-.card h2{font-size:.95rem;font-weight:700;color:var(--blue);margin-bottom:.75rem;
-         border-bottom:2px solid var(--border);padding-bottom:.4rem}
+.card h2{font-size:.95rem;font-weight:700;color:var(--blue);margin-bottom:.75rem;border-bottom:2px solid var(--border);padding-bottom:.4rem}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.25rem}
 .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem}
 .stat-box{background:var(--blue-light);border-radius:8px;text-align:center;padding:.8rem}
@@ -1064,15 +1258,13 @@ header h1{font-size:1.5rem;font-weight:700}
 .stat-lbl{font-size:.72rem;color:var(--sub)}
 #viewer{width:100%;height:400px;border-radius:8px;overflow:hidden;background:#0f1923}
 table{width:100%;border-collapse:collapse;font-size:.85rem}
-th{background:var(--blue-light);padding:.5rem .7rem;text-align:left;font-weight:700;
-   border-bottom:2px solid var(--border);font-size:.78rem}
+th{background:var(--blue-light);padding:.5rem .7rem;text-align:left;font-weight:700;border-bottom:2px solid var(--border);font-size:.78rem}
 td{padding:.4rem .7rem;border-bottom:1px solid var(--border)}
 .dist-pill{display:inline-block;padding:.12rem .5rem;border-radius:999px;font-size:.78rem;font-weight:700}
 .hb-strong{background:#dcfce7;color:#14532d}
 .hb-medium{background:#fef9c3;color:#713f12}
 .hb-weak{background:#fee2e2;color:#7f1d1d}
-.mut-item{border-left:4px solid var(--blue);background:#f8fafc;border-radius:0 8px 8px 0;
-          padding:.8rem 1rem;margin-bottom:.6rem;font-size:.85rem}
+.mut-item{border-left:4px solid var(--blue);background:#f8fafc;border-radius:0 8px 8px 0;padding:.8rem 1rem;margin-bottom:.6rem;font-size:.85rem}
 .priority-high{border-color:#dc2626}
 .priority-mid{border-color:#ea580c}
 .mut-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:.75rem}
@@ -1117,17 +1309,13 @@ const LIG="${ligResname}";
     radius:.07,color:'#facc15',dashed:true,fromCap:2,toCap:2
   });
   const seen=new Set();
-  for(const h of HBS){
-    const k=h.protChain+h.protResSeq;
-    if(seen.has(k)) continue; seen.add(k);
+  for(const h of HBS){const k=h.protChain+h.protResSeq;if(seen.has(k))continue;seen.add(k);
     v.addLabel(h.protResName+h.protResSeq+'\\n'+h.distance.toFixed(2)+'Å',{
       position:{x:h.protXYZ[0],y:h.protXYZ[1],z:h.protXYZ[2]},
-      backgroundColor:'rgba(30,58,95,.9)',fontColor:'#fff',fontSize:11,padding:3});
-  }
+      backgroundColor:'rgba(30,58,95,.9)',fontColor:'#fff',fontSize:11,padding:3});}
   v.zoomTo({resn:LIG});v.render();
 })();
 <\/script></body></html>`;
-
   const blob = new Blob([html], {type:"text/html"});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
@@ -1164,20 +1352,14 @@ function copyPyMOL() {
   const box = document.getElementById("pymol-cmd-box");
   const textarea = document.getElementById("pymol-cmds");
   const cutoff = parseFloat(document.getElementById("cutoff-input").value)||3.5;
-
   let cmds = `# PyMOL 指令 – ${pdbId}  配體：${ligResname}\n`;
   cmds += `# 生成日期：${new Date().toLocaleString("zh-TW")}\n\n`;
-  cmds += `fetch ${pdbId}, async=0\n`;
-  cmds += `remove resn HOH+WAT\n\n`;
-  cmds += `# 視覺化\nhide everything\n`;
-  cmds += `show cartoon, polymer\ncolor spectrum, polymer\n\n`;
+  cmds += `fetch ${pdbId}, async=0\nremove resn HOH+WAT\n\n`;
+  cmds += `# 視覺化\nhide everything\nshow cartoon, polymer\ncolor spectrum, polymer\n\n`;
   cmds += `# 配體\nshow sticks, resn ${ligResname}\ncolor yellow, resn ${ligResname}\n\n`;
   cmds += `# 氫鍵殘基（橘色高亮）\n`;
   const hbUniq = new Map();
-  for(const hb of hbonds){
-    const k=`${hb.protChain}_${hb.protResSeq}`;
-    if(!hbUniq.has(k)) hbUniq.set(k,hb);
-  }
+  for(const hb of hbonds){const k=`${hb.protChain}_${hb.protResSeq}`;if(!hbUniq.has(k))hbUniq.set(k,hb);}
   for(const [,hb] of hbUniq){
     cmds += `show sticks, chain ${hb.protChain} and resi ${hb.protResSeq}\n`;
     cmds += `color tv_orange, chain ${hb.protChain} and resi ${hb.protResSeq}\n`;
@@ -1188,19 +1370,11 @@ function copyPyMOL() {
     const hb=hbonds[i];
     cmds += `distance hb${i+1}, (resn ${ligResname} and name ${hb.ligAtom}), (chain ${hb.protChain} and resi ${hb.protResSeq} and name ${hb.protAtom})\n`;
   }
-  cmds += `\n# 美化\nbg_color black\nset cartoon_fancy_helices, 1\nset ray_shadows, 0\n`;
-  cmds += `zoom resn ${ligResname}, 8\n\n`;
-  cmds += `# 匯出圖像\nray 2400, 1800\npng ${pdbId}_hb_analysis.png, dpi=300\n`;
-
+  cmds += `\nbg_color black\nset cartoon_fancy_helices, 1\nset ray_shadows, 0\n`;
+  cmds += `zoom resn ${ligResname}, 8\n\nray 2400, 1800\npng ${pdbId}_hb_analysis.png, dpi=300\n`;
   textarea.value = cmds;
   box.style.display = box.style.display==="none" ? "block" : "none";
-
-  if(box.style.display==="block"){
-    navigator.clipboard?.writeText(cmds).then(()=>{
-      // copied
-    }).catch(()=>{});
-    textarea.select();
-  }
+  if(box.style.display==="block") navigator.clipboard?.writeText(cmds).catch(()=>{});
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
