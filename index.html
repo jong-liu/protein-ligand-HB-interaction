@@ -227,8 +227,8 @@ tr:hover td{background:#f8fafc}
          ondragover="event.preventDefault();this.classList.add('drag-over')"
          ondragleave="this.classList.remove('drag-over')"
          ondrop="handleDrop(event)">
-      <input type="file" id="file-input" accept=".pdb,.ent" onchange="handleFile(event)">
-      <span id="upload-zone-label">📂 點此或拖曳上傳 .pdb / .ent 檔案</span>
+      <input type="file" id="file-input" accept=".pdb,.ent,.cif" onchange="handleFile(event)">
+      <span id="upload-zone-label">📂 點此或拖曳上傳 .pdb / .ent / .cif 檔案</span>
     </div>
   </div>
 
@@ -327,6 +327,7 @@ let allAtoms    = [];
 // 追蹤上傳的檔案資料（讓按鈕也能使用）
 let uploadedPdbText = null;
 let uploadedFileName = "";
+let fileFormat = "pdb";  // "pdb" 或 "cif"
 let hbonds      = [];
 let nearbyRes   = [];
 let labelsOn    = true;
@@ -401,6 +402,121 @@ function parsePDB(text) {
         isHet:   rec === "HETATM",
       });
     } catch(e) { /* skip bad lines */ }
+  }
+  return atoms;
+}
+
+// ── mmCIF Token 分割（處理引號字串）──────────────────────────────────────────
+function cifTokenize(line) {
+  const tokens = [];
+  let i = 0, n = line.length;
+  while (i < n) {
+    while (i < n && (line[i] === " " || line[i] === "\t")) i++;
+    if (i >= n) break;
+    if (line[i] === '"' || line[i] === "'") {
+      const q = line[i++];
+      const s = i;
+      while (i < n && line[i] !== q) i++;
+      tokens.push(line.slice(s, i));
+      if (i < n) i++;
+    } else {
+      const s = i;
+      while (i < n && line[i] !== " " && line[i] !== "\t") i++;
+      tokens.push(line.slice(s, i));
+    }
+  }
+  return tokens;
+}
+
+// ── mmCIF (_atom_site loop) 解析器 ───────────────────────────────────────────
+function parseCIF(text) {
+  const atoms = [];
+  const lines = text.split("\n");
+  let state = "normal";   // normal | loop_cols | loop_data
+  let colIdx = {};
+  let columns = [];
+  let isAtomLoop = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line === "" || line.startsWith("#")) continue;
+
+    // 新的 loop 開始
+    if (line === "loop_") {
+      state = "loop_cols";
+      columns = [];
+      colIdx = {};
+      isAtomLoop = false;
+      continue;
+    }
+
+    // 收集欄位名稱
+    if (state === "loop_cols") {
+      if (line.startsWith("_")) {
+        const col = line.toLowerCase().split(/\s+/)[0];
+        colIdx[col] = columns.length;
+        columns.push(col);
+        continue;
+      } else {
+        // 欄位定義結束，進入資料區
+        isAtomLoop = columns.some(c => c.startsWith("_atom_site."));
+        state = "loop_data";
+        // 不 continue，讓這一行進入下方的資料處理
+      }
+    }
+
+    // 資料區
+    if (state === "loop_data") {
+      if (line === "loop_") {
+        state = "loop_cols"; columns = []; colIdx = {}; isAtomLoop = false;
+        continue;
+      }
+      if (line.startsWith("_") || line.startsWith("data_") || line.startsWith("save_")) {
+        state = "normal"; continue;
+      }
+      if (!isAtomLoop) continue;
+
+      const tokens = cifTokenize(line);
+      if (tokens.length < 3) continue;
+
+      // 取欄位值（"." 與 "?" 視為空值）
+      const get = key => {
+        const idx = colIdx[key];
+        if (idx === undefined || idx >= tokens.length) return undefined;
+        const v = tokens[idx];
+        return (v === "." || v === "?") ? undefined : v;
+      };
+
+      const group = get("_atom_site.group_pdb");
+      if (!group || (group !== "ATOM" && group !== "HETATM")) continue;
+
+      // 只取第一個 model
+      const modelNum = get("_atom_site.pdbx_pdb_model_num");
+      if (modelNum && modelNum !== "1") continue;
+
+      // 跳過非主要 alt loc
+      const altId = tokens[colIdx["_atom_site.label_alt_id"]];
+      if (altId && altId !== "." && altId !== "?" && altId !== "A") continue;
+
+      const x = parseFloat(get("_atom_site.cartn_x"));
+      const y = parseFloat(get("_atom_site.cartn_y"));
+      const z = parseFloat(get("_atom_site.cartn_z"));
+      if (isNaN(x) || isNaN(y) || isNaN(z)) continue;
+
+      const elem = (get("_atom_site.type_symbol") || "X").toUpperCase();
+      atoms.push({
+        serial:    parseInt(get("_atom_site.id")) || 0,
+        name:      get("_atom_site.auth_atom_id")  || get("_atom_site.label_atom_id") || "",
+        resName:   get("_atom_site.auth_comp_id")  || get("_atom_site.label_comp_id") || "",
+        chain:     get("_atom_site.auth_asym_id")  || get("_atom_site.label_asym_id") || "A",
+        resSeq:    parseInt(get("_atom_site.auth_seq_id") || get("_atom_site.label_seq_id")) || 0,
+        x, y, z,
+        occupancy: parseFloat(get("_atom_site.occupancy"))      || 1.0,
+        bfactor:   parseFloat(get("_atom_site.b_iso_or_equiv")) || 0.0,
+        element:   elem,
+        isHet:     group === "HETATM",
+      });
+    }
   }
   return atoms;
 }
@@ -498,11 +614,12 @@ async function fetchPDB(id) {
 // ═══════════════════════════════════════════════════════════════════════════
 // Main Analysis Pipeline
 // ═══════════════════════════════════════════════════════════════════════════
-async function runAnalysis(id, rawPdb, ligName, cutoff, chainFilter) {
-  setStatus("解析 PDB 結構...");
-  allAtoms = parsePDB(rawPdb);
+async function runAnalysis(id, rawPdb, ligName, cutoff, chainFilter, fmt = "pdb") {
+  const fmtLabel = fmt === "cif" ? "mmCIF" : "PDB";
+  setStatus(`解析 ${fmtLabel} 結構...`);
+  allAtoms = fmt === "cif" ? parseCIF(rawPdb) : parsePDB(rawPdb);
 
-  if (!allAtoms.length) throw new Error("PDB 解析失敗，未找到 ATOM/HETATM 記錄");
+  if (!allAtoms.length) throw new Error(`${fmtLabel} 解析失敗，未找到 ATOM/HETATM 記錄`);
 
   const ligands = detectLigands(allAtoms);
   if (!ligands.length) throw new Error("未找到配體（非水 HETATM 記錄）");
@@ -531,7 +648,7 @@ async function runAnalysis(id, rawPdb, ligName, cutoff, chainFilter) {
   nearbyRes = findNearby(atoms, ligResname, 5.0);
 
   setStatus("渲染 3D 結構...");
-  renderViewer(rawPdb);
+  renderViewer(rawPdb, fmt);
 
   setStatus("生成分析報告...");
   renderStats(id, atoms, ligands);
@@ -547,11 +664,11 @@ async function runAnalysis(id, rawPdb, ligName, cutoff, chainFilter) {
 // ═══════════════════════════════════════════════════════════════════════════
 // 3D Viewer
 // ═══════════════════════════════════════════════════════════════════════════
-function renderViewer(pdb) {
+function renderViewer(pdb, fmt = "pdb") {
   const el = document.getElementById("mol-viewer");
   if (viewer) viewer.clear();
   viewer = $3Dmol.createViewer(el, {backgroundColor:"#0f1923"});
-  viewer.addModel(pdb, "pdb");
+  viewer.addModel(pdb, fmt === "cif" ? "cif" : "pdb");
   applyStyle("cartoon");
   viewer.zoomTo({resn: ligResname});
   viewer.render();
@@ -797,8 +914,8 @@ async function fetchAndAnalyze() {
     showStatus(`分析上傳的檔案：${uploadedFileName} ...`);
     try {
       pdbData = uploadedPdbText;
-      pdbId   = uploadedFileName.replace(/\.pdb|\.ent/i,"").toUpperCase();
-      await runAnalysis(pdbId, pdbData, ligName, cutoff, chain);
+      pdbId   = uploadedFileName.replace(/\.pdb|\.ent|\.cif/i,"").toUpperCase();
+      await runAnalysis(pdbId, pdbData, ligName, cutoff, chain, fileFormat);
     } catch(e) {
       showError(e.message || String(e));
       hideStatus();
@@ -855,20 +972,25 @@ function readFile(file) {
   const reader = new FileReader();
   reader.onload = async e => {
     try {
+      // 偵測檔案格式
+      fileFormat = /\.cif$/i.test(file.name) ? "cif" : "pdb";
       // 儲存至全域，讓「載入 & 分析」按鈕也能取用
       uploadedPdbText = e.target.result;
       uploadedFileName = file.name;
       pdbData = uploadedPdbText;
-      pdbId   = file.name.replace(/\.pdb|\.ent/i,"").toUpperCase();
+      pdbId   = file.name.replace(/\.pdb|\.ent|\.cif/i,"").toUpperCase();
       // 只更新文字 span，保留 <input> 元素讓使用者可再次點擊上傳
+      const fmtTag = fileFormat === "cif"
+        ? `<span style="background:#ede9fe;color:#5b21b6;font-size:.72rem;
+                        padding:.1rem .4rem;border-radius:4px;font-weight:700">mmCIF</span>`
+        : `<span style="background:#dbeafe;color:#1e40af;font-size:.72rem;
+                        padding:.1rem .4rem;border-radius:4px;font-weight:700">PDB</span>`;
       document.getElementById("upload-zone-label").innerHTML =
-        `✅ <strong>${file.name}</strong> &nbsp;
-         <span style="font-size:.8rem;color:var(--blue)">
-           （點此可更換檔案）
-         </span>`;
+        `✅ <strong>${file.name}</strong> ${fmtTag} &nbsp;
+         <span style="font-size:.8rem;color:var(--blue)">（點此可更換檔案）</span>`;
       // 重設 input value，確保選同一個檔案時仍會觸發 onchange
       document.getElementById("file-input").value = "";
-      await runAnalysis(pdbId, pdbData, ligName, cutoff, chain);
+      await runAnalysis(pdbId, pdbData, ligName, cutoff, chain, fileFormat);
     } catch(err) {
       showError(err.message || String(err));
       hideStatus();
