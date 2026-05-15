@@ -1,4 +1,5 @@
-# 只 push index.html，其餘本機工具不上傳
+# 追蹤：index.html, CLAUDE.md, README.md, .gitignore
+# 其餘本機工具不上傳
 hb_analyzer.py
 pymol_automation.py
 git_setup_commands.txt
