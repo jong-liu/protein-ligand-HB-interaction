@@ -260,11 +260,12 @@ tr:hover td{background:#f8fafc}
         <div id="mol-viewer"></div>
         <div class="viewer-controls">
           <button class="view-btn active" onclick="setStyle('cartoon')">Cartoon</button>
+          <button class="view-btn" onclick="setStyle('stick')">Stick</button>
           <button class="view-btn" onclick="setStyle('surface')">表面</button>
-          <button class="view-btn" onclick="setStyle('cartoon+surface')">Cartoon+表面</button>
+          <button class="view-btn" onclick="setStyle('sphere')">Sphere</button>
           <button class="view-btn" onclick="toggleLabels()">標籤 開/關</button>
-          <button class="view-btn" onclick="resetView()">🔍 重置視角</button>
           <button class="view-btn" onclick="toggleSpin()">旋轉</button>
+          <button class="view-btn" onclick="resetView()">🔍 重置視角</button>
         </div>
         <div style="font-size:.72rem;color:var(--sub);margin-top:.4rem">
           黃色 = 氫鍵 | 橘色標籤 = 關鍵殘基 | 左鍵旋轉 | 右鍵平移 | 滾輪縮放
@@ -683,23 +684,33 @@ function applyStyle(style) {
 
   const hasLig = ligResname !== "";
 
-  // Protein cartoon
-  if (style === "cartoon" || style === "cartoon+surface") {
+  // Protein cartoon（ribbon 螺旋與 sheet 顯示）
+  if (style === "cartoon") {
     viewer.setStyle({hetflag:false},
-      {cartoon:{colorscheme:"spectrum", opacity: style==="cartoon+surface" ? 0.7 : 0.9}});
+      {cartoon:{colorscheme:"spectrum", opacity:0.9}});
   }
-  // Surface
-  if (style === "surface" || style === "cartoon+surface") {
+  // Stick（所有殘基以鍵棒模式顯示，適合近距離觀察）
+  if (style === "stick") {
+    viewer.setStyle({hetflag:false},
+      {stick:{colorscheme:"spectrum", radius:0.15}});
+  }
+  // Surface（蛋白質表面電位圖，適合觀察結合口袋）
+  if (style === "surface") {
     viewer.addSurface($3Dmol.SurfaceType.VDW,
-      {opacity:0.45, colorscheme:{gradient:"rwb", min:-1, max:1}},
+      {opacity:0.75, colorscheme:{gradient:"rwb", min:-1, max:1}},
       {hetflag:false});
+  }
+  // Sphere（每個原子以球體顯示，適合 VDW 半徑比較）
+  if (style === "sphere") {
+    viewer.setStyle({hetflag:false},
+      {sphere:{colorscheme:"spectrum", scale:0.35}});
   }
 
   // Water invisible
   viewer.setStyle({resn:"HOH"}, {});
   viewer.setStyle({resn:"WAT"}, {});
 
-  // Ligand sticks
+  // Ligand sticks + sphere（配體固定以 stick+sphere 顯示）
   if (hasLig) {
     viewer.setStyle({resn: ligResname},
       {stick:{colorscheme:"default", radius:0.22},
@@ -734,7 +745,7 @@ function applyStyle(style) {
   viewer.render();
   currentStyle = style;
   document.querySelectorAll(".view-btn").forEach(b => b.classList.remove("active"));
-  const map = {"cartoon":0, "surface":1, "cartoon+surface":2};
+  const map = {"cartoon":0, "stick":1, "surface":2, "sphere":3};
   const btns = document.querySelectorAll(".view-btn");
   if (map[style] !== undefined) btns[map[style]].classList.add("active");
 }
@@ -747,8 +758,8 @@ function toggleLabels() {
 }
 function toggleSpin() {
   if (!viewer) return;
-  if (spinning) { viewer.stopAnimate(); spinning=false; }
-  else { viewer.rotate(1,{x:0,y:1,z:0},100); spinning=true; }
+  if (spinning) { viewer.spin(false); spinning=false; }
+  else { viewer.spin('y', 1); spinning=true; }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

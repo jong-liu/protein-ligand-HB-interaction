@@ -74,6 +74,11 @@ let fileFormat      // 'pdb' 或 'cif'
 | `findNearby(atoms, lig, cutoff=5.0)` | 5Å 近鄰殘基 |
 | `runAnalysis(id, rawPdb, ligName, cutoff, chainFilter, fmt)` | 分析主流程，配體比對 case-insensitive |
 | `renderViewer(pdb, fmt)` | py3Dmol 初始化與格式傳入 |
+| `applyStyle(style)` | 套用 3D 風格：`'cartoon'`/`'stick'`/`'surface'`/`'sphere'`，自動更新 active 按鈕 |
+| `setStyle(s)` | `applyStyle(s)` 的公開包裝函數 |
+| `toggleLabels()` | 切換 H-Bond 殘基標籤顯示／隱藏（呼叫 applyStyle 重繪） |
+| `toggleSpin()` | 連續旋轉開關：`viewer.spin('y',1)` 啟動、`viewer.spin(false)` 停止 |
+| `resetView()` | 重置視角至配體為中心：`viewer.zoomTo({resn:ligResname},300)` |
 | `fetchAndAnalyze()` | 主按鈕入口：PDB ID 下載 或 使用 uploadedPdbText |
 | `readFile(file)` | 上傳處理，偵測 .cif，更新 span 文字，重置 input.value |
 | `buildPrintContainer()` | 建立隱藏 794px 報告 div 供 PDF 截圖 |
@@ -85,6 +90,20 @@ let fileFormat      // 'pdb' 或 'cif'
 - 預設 cutoff：**3.6 Å**（共 4 處 JS fallback + 1 處 HTML input value）
 - 篩選原子：蛋白質 `N`/`O`/`S` 與配體 `N`/`O`/`S` 之間的重原子距離
 - 去重邏輯：同一殘基保留最短距離的配對
+
+### 3D 視覺化按鈕對照表（2026-05-17 修正確認版）
+
+| 按鈕 | onclick | 效果 | py3Dmol 呼叫 |
+|------|---------|------|-------------|
+| Cartoon | `setStyle('cartoon')` | ribbon 螺旋與 sheet 顯示（預設） | `setStyle({hetflag:false},{cartoon:{...}})` |
+| Stick | `setStyle('stick')` | 所有殘基以鍵棒顯示，適合近距離觀察 | `setStyle({hetflag:false},{stick:{colorscheme:"spectrum",radius:0.15}})` |
+| 表面 | `setStyle('surface')` | 蛋白質表面電位圖，適合觀察結合口袋 | `addSurface($3Dmol.SurfaceType.VDW,{opacity:0.75,...})` |
+| Sphere | `setStyle('sphere')` | 每個原子以球體顯示，VDW 半徑比較 | `setStyle({hetflag:false},{sphere:{colorscheme:"spectrum",scale:0.35}})` |
+| 標籤 開/關 | `toggleLabels()` | CA 原子位置顯示/隱藏殘基名稱標籤 | 切換 `labelsOn`，呼叫 `applyStyle(currentStyle)` |
+| 旋轉 | `toggleSpin()` | 結構自動慢速旋轉（再次點擊停止） | `viewer.spin('y',1)` / `viewer.spin(false)` |
+| 重置視角 | `resetView()` | 視窗回到以配體為中心的預設視角 | `viewer.zoomTo({resn:ligResname},300)` |
+
+> **注意**：配體無論在何種模式下，固定以 `stick+sphere` 雙重風格顯示。
 
 ---
 
@@ -124,6 +143,7 @@ let fileFormat      // 'pdb' 或 'cif'
 - 重複上傳不生效：確認 `readFile()` 更新的是 `<span>` 而非整個 label 的 innerHTML，且有 `input.value = ""`
 - 配體大小寫：`runAnalysis()` 使用 `toLowerCase()` 比對，`ligResname` 儲存原始大小寫
 - PDF 截圖文字：使用 html2canvas 而非純文字 jsPDF（支援中文）
+- **3D 按鈕錯誤（2026-05-17 修正）**：舊版按鈕缺少 Stick / Sphere，多了「Cartoon+表面」且不在預期清單中；`toggleSpin()` 誤用 `viewer.rotate()`（單次旋轉）而非 `viewer.spin('y',1)`（連續旋轉）。已全數修正，按鈕順序改為 Cartoon → Stick → 表面 → Sphere → 標籤 → 旋轉 → 重置視角。
 
 ---
 
