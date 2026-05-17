@@ -75,7 +75,7 @@ let fileFormat      // 'pdb' 或 'cif'
 | `findNearby(atoms, lig, cutoff=5.0)` | 5Å 近鄰殘基 |
 | `runAnalysis(id, rawPdb, ligName, cutoff, chainFilter, fmt)` | 分析主流程，配體比對 case-insensitive |
 | `renderViewer(pdb, fmt)` | py3Dmol 初始化與格式傳入 |
-| `applyStyle(style)` | 套用 3D 風格；執行前先移除舊 surface（防疊加）；以 id 更新按鈕 active 狀態 |
+| `applyStyle(style)` | 套用 3D 風格；執行前先 removeAllLabels + 移除舊 surface（防疊加）；cartoon 模式下 H-bond 殘基額外加 line style；以 id 更新按鈕 active 狀態 |
 | `setStyle(s)` | 互斥切換：若已 active 同一樣式則回預設 cartoon；否則套用新樣式 |
 | `toggleLabels()` | 切換 H-Bond 殘基標籤顯示／隱藏；再按一次 → 關閉（labelsOn 預設 true） |
 | `toggleSpin()` | 連續旋轉開關：再按停止；同步更新 `btn-spin` active 狀態 |
@@ -150,6 +150,8 @@ let fileFormat      // 'pdb' 或 'cif'
 - PDF 截圖文字：使用 html2canvas 而非純文字 jsPDF（支援中文）
 - **3D 按鈕錯誤（2026-05-17 修正）**：舊版按鈕缺少 Stick / Sphere，多了「Cartoon+表面」且不在預期清單中；`toggleSpin()` 誤用 `viewer.rotate()`（單次旋轉）而非 `viewer.spin('y',1)`（連續旋轉）。已全數修正，按鈕順序改為 Cartoon → Stick → 表面 → Sphere → 標籤 → 旋轉 → 重置視角。
 - **按鈕功能疊加 + toggle + Reset 無效（2026-05-17 v2 修正）**：① Surface 多次點擊會 addSurface 堆疊 → 加入 `surfaceActive` flag 防重複；② style 按鈕再按一次無法回預設 → `setStyle()` 加 toggle 邏輯（`currentStyle===s` 時回 cartoon）；③ 標籤/旋轉按鈕缺乏 active 視覺狀態 → 改以 `id="btn-*"` 精準更新；④ 「重置視角」改名為 Reset，`resetView()` 修正為先停旋轉再 zoom（有配體用 `zoomTo({resn:ligResname})` 否則 `zoomTo({})` zoom all）。
+- **標籤關閉無效（2026-05-17 v3 修正）**：`viewer.setStyle({},{})` 不清除 `addLabel()` 的標籤 → 在 `applyStyle()` 開頭加 `viewer.removeAllLabels()`，確保 `labelsOn=false` 時真正隱藏。操作說明文字同步修正：「右鍵平移」→「右鍵縮放」，新增「中鍵平移」。
+- **Cartoon 模式 + 標籤顏色（2026-05-17 v4 修正）**：① Cartoon 模式下 H-bond 交互殘基現以 `cartoon + line` 雙重風格顯示，讓關鍵殘基在 ribbon 背景中更突出；② 標籤 `backgroundColor` 由深藍 `rgba(30,58,95,0.9)` 改為橘色 `rgba(194,65,12,0.92)`，與說明文字「橘色標籤 = 關鍵殘基」一致；PDF 截圖用的 `buildPrintContainer` 標籤顏色同步更新。
 
 ---
 

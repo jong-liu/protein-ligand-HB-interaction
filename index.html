@@ -697,6 +697,20 @@ function applyStyle(style) {
   if (style === "cartoon") {
     viewer.setStyle({hetflag:false},
       {cartoon:{colorscheme:"spectrum", opacity:0.9}});
+    // H-bond 交互殘基額外以 line style 突顯（cartoon + line 疊加）
+    if (hbonds.length > 0) {
+      const seenRes = new Set();
+      for (const hb of hbonds) {
+        const k = `${hb.protChain}|${hb.protResSeq}`;
+        if (seenRes.has(k)) continue;
+        seenRes.add(k);
+        viewer.setStyle(
+          {chain: hb.protChain, resi: hb.protResSeq, hetflag: false},
+          {cartoon:{colorscheme:"spectrum", opacity:0.9},
+           line:{colorscheme:"default", linewidth:2}}
+        );
+      }
+    }
   }
   // Stick（所有殘基以鍵棒模式顯示，適合近距離觀察）
   if (style === "stick") {
@@ -747,7 +761,7 @@ function applyStyle(style) {
       seen.add(k);
       viewer.addLabel(`${hb.protResName}${hb.protResSeq}\n${hb.distance.toFixed(2)}Å`, {
         position:{x:hb.protXYZ[0], y:hb.protXYZ[1], z:hb.protXYZ[2]},
-        backgroundColor:"rgba(30,58,95,0.9)",
+        backgroundColor:"rgba(194,65,12,0.92)",
         fontColor:"#fff", fontSize:11,
         borderRadius:3, padding:3,
       });
@@ -1369,7 +1383,7 @@ const LIG="${ligResname}";
   for(const h of HBS){const k=h.protChain+h.protResSeq;if(seen.has(k))continue;seen.add(k);
     v.addLabel(h.protResName+h.protResSeq+'\\n'+h.distance.toFixed(2)+'Å',{
       position:{x:h.protXYZ[0],y:h.protXYZ[1],z:h.protXYZ[2]},
-      backgroundColor:'rgba(30,58,95,.9)',fontColor:'#fff',fontSize:11,padding:3});}
+      backgroundColor:'rgba(194,65,12,0.92)',fontColor:'#fff',fontSize:11,padding:3});}
   v.zoomTo({resn:LIG});v.render();
 })();
 <\/script></body></html>`;
