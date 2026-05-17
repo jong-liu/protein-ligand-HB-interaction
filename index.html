@@ -268,7 +268,7 @@ tr:hover td{background:#f8fafc}
           <button class="view-btn" id="btn-reset"   onclick="resetView()">Reset</button>
         </div>
         <div style="font-size:.72rem;color:var(--sub);margin-top:.4rem">
-          黃色 = 氫鍵 | 橘色標籤 = 關鍵殘基 | 左鍵旋轉 | 右鍵平移 | 滾輪縮放
+          黃色 = 氫鍵 | 橘色標籤 = 關鍵殘基 | 左鍵旋轉 | 右鍵縮放 | 中鍵平移 | 滾輪縮放
         </div>
       </div>
 
@@ -688,7 +688,8 @@ function applyStyle(style) {
     surfaceActive = false;
   }
 
-  viewer.setStyle({}, {});  // clear all atom styles
+  viewer.removeAllLabels();  // 先清除舊標籤（setStyle 不會清除 addLabel）
+  viewer.setStyle({}, {});   // clear all atom styles
 
   const hasLig = ligResname !== "";
 
