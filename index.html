@@ -922,18 +922,24 @@ function renderMutations() {
             <span class="mut-dist">${hb.distance.toFixed(2)} Å</span></span>
           <span class="priority-badge badge-high">高優先</span>
         </div>
-        <div class="mut-role">直接氫鍵交互作用</div>
+        <div class="mut-role">Side chain 氫鍵交互（原子：<strong>${hb.protAtom}</strong>）</div>
         <div class="mut-sugg">💡 ${hint}</div>
       </div>`;
   }
 
-  // Medium priority: nearby but no H-bond
+  // Medium priority: 5 Å 近鄰殘基，無 side chain H-bond（含僅有 backbone H-bond 者）
+  const allHbKeys = new Set(hbonds.map(h=>`${h.protChain}_${h.protResSeq}`));
   let count = 0;
   for (const r of nearbyRes) {
     const k = `${r.chain}_${r.resSeq}`;
-    if (hbKeys.has(k)) continue;
+    if (hbKeys.has(k)) continue;          // 已列為高優先（side chain H-bond）→ 跳過
     if (++count > 8) break;
     const hint = MUTATION_HINTS[r.resName] || `${r.resName}→Ala 探索空間效應`;
+    // 判斷是否為「backbone H-bond only」殘基（有 H-bond 但全為 backbone）
+    const bbOnly = allHbKeys.has(k) && !hbKeys.has(k);
+    const roleText = bbOnly
+      ? `近鄰殘基（${r.minDist.toFixed(2)} Å，僅 backbone 氫鍵 — 突變不影響此鍵）`
+      : `近鄰殘基（${r.minDist.toFixed(2)} Å，無直接氫鍵）`;
     html += `
       <div class="mut-item priority-mid">
         <div class="mut-header">
@@ -941,7 +947,7 @@ function renderMutations() {
             <span style="font-size:.78rem;color:var(--sub)"> (Ch.${r.chain})</span></span>
           <span class="priority-badge badge-mid">中優先</span>
         </div>
-        <div class="mut-role">近鄰殘基（${r.minDist.toFixed(2)} Å，無直接氫鍵）</div>
+        <div class="mut-role">${roleText}</div>
         <div class="mut-sugg">💡 ${hint}</div>
       </div>`;
   }
@@ -1136,7 +1142,7 @@ function buildPrintContainer() {
         <span style="background:#dcfce7;color:#14532d;padding:1px 5px;border-radius:3px;font-size:11px">${hb.distance.toFixed(3)} Å</span>
         &nbsp;<span style="background:#fee2e2;color:#b91c1c;font-size:10px;padding:1px 5px;border-radius:3px">高優先</span>
       </div>
-      <div style="color:#666;font-size:11px;margin:2px 0">直接氫鍵交互作用</div>
+      <div style="color:#666;font-size:11px;margin:2px 0">Side chain 氫鍵交互（原子：${hb.protAtom}）</div>
       <div style="font-size:11px">💡 ${hint}</div>
     </div>`;
   }

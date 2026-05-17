@@ -91,7 +91,53 @@ let fileFormat      // 'pdb' 或 'cif'
 - 預設 cutoff：**3.6 Å**（共 4 處 JS fallback + 1 處 HTML input value）
 - 篩選原子：蛋白質 `N`/`O`/`S` 與配體 `N`/`O`/`S` 之間的重原子距離
 - 去重邏輯：同一殘基保留最短距離的配對
-- **突變位點過濾原則**：backbone 原子（`N`/`CA`/`C`/`O`/`OXT`）形成的 H-bond 不受突變影響，故 `renderMutations()` 與 PDF 突變分析段落均以 `BACKBONE` set 過濾，僅保留 side chain 原子的交互殘基。`hbKeys`（全部 H-bond）仍用於近鄰表格的「⚡ 氫鍵殘基」標記；`scHbKeys`（side chain only）用於突變分析的去重與中優先排除。
+
+---
+
+### 突變位點分析條件（Mutation Site Analysis Criteria）
+
+#### 優先級定義
+
+| 優先級 | 標籤 | 入列條件 | 生物學意義 |
+|--------|------|----------|-----------|
+| **高優先** | 紅色 | 蛋白質 **side chain** 原子與配體形成 H-bond（D–A ≤ cutoff） | 突變直接破壞 H-bond，對配體結合影響最大 |
+| **中優先** | 橘色 | 5 Å 內近鄰殘基，**無** side chain H-bond（含僅有 backbone H-bond 者） | 可能有疏水接觸或空間效應，突變可探索構形影響 |
+
+#### Backbone 排除規則（核心原則）
+
+> **理由**：Backbone 原子（`N`、`CA`、`C`、`O`、`OXT`）是肽鍵骨架，為所有胺基酸共有。  
+> 無論突變成哪種胺基酸，backbone 原子不消失，由 backbone 形成的 H-bond **不會被突變破壞**。  
+> 因此這類 H-bond 對突變設計沒有參考價值，**不應列入高優先突變位點**。
+
+| 情境 | 處理方式 |
+|------|---------|
+| 殘基僅有 backbone H-bond | 不列高優先；若在 5 Å 內，以中優先列出，並標注「僅 backbone 氫鍵 — 突變不影響此鍵」 |
+| 殘基同時有 backbone + side chain H-bond | 以 side chain H-bond 列入高優先（backbone 部分忽略） |
+| 殘基僅有 side chain H-bond | 正常列入高優先 |
+| 5 Å 近鄰、無任何 H-bond | 列入中優先，描述「無直接氫鍵」 |
+
+#### 程式碼實作邏輯
+
+```javascript
+const BACKBONE = new Set(["N","CA","C","O","OXT"]);
+
+// Step 1：過濾出 side chain H-bond
+const scHbonds = hbonds.filter(hb => !BACKBONE.has(hb.protAtom));
+
+// Step 2：建立兩個查找集合
+const scHbKeys  = new Set(scHbonds.map(h=>`${h.protChain}_${h.protResSeq}`)); // 突變分析用
+const allHbKeys = new Set(hbonds.map(h=>`${h.protChain}_${h.protResSeq}`));   // 近鄰表格標記用
+
+// Step 3：高優先 — scHbonds 去重（同殘基取最短距離）
+// Step 4：中優先 — nearbyRes 排除 scHbKeys 後列出（含 backbone-only 殘基，加標注）
+// Step 5：近鄰表格「⚡ 氫鍵殘基」標記 — 使用 allHbKeys（含 backbone H-bond）
+```
+
+#### 顯示格式
+
+- 高優先卡片：`Side chain 氫鍵交互（原子：<protAtom>）`
+- 中優先卡片（backbone only）：`近鄰殘基（X.XX Å，僅 backbone 氫鍵 — 突變不影響此鍵）`
+- 中優先卡片（純近鄰）：`近鄰殘基（X.XX Å，無直接氫鍵）`
 
 ### 3D 視覺化按鈕對照表（2026-05-17 v2 — toggle + reset-first 版）
 
@@ -153,7 +199,7 @@ let fileFormat      // 'pdb' 或 'cif'
 - **按鈕功能疊加 + toggle + Reset 無效（2026-05-17 v2 修正）**：① Surface 多次點擊會 addSurface 堆疊 → 加入 `surfaceActive` flag 防重複；② style 按鈕再按一次無法回預設 → `setStyle()` 加 toggle 邏輯（`currentStyle===s` 時回 cartoon）；③ 標籤/旋轉按鈕缺乏 active 視覺狀態 → 改以 `id="btn-*"` 精準更新；④ 「重置視角」改名為 Reset，`resetView()` 修正為先停旋轉再 zoom（有配體用 `zoomTo({resn:ligResname})` 否則 `zoomTo({})` zoom all）。
 - **標籤關閉無效（2026-05-17 v3 修正）**：`viewer.setStyle({},{})` 不清除 `addLabel()` 的標籤 → 在 `applyStyle()` 開頭加 `viewer.removeAllLabels()`，確保 `labelsOn=false` 時真正隱藏。操作說明文字同步修正：「右鍵平移」→「右鍵縮放」，新增「中鍵平移」。
 - **Cartoon 模式 + 標籤顏色（2026-05-17 v4 修正）**：① Cartoon 模式下 H-bond 交互殘基現以 `cartoon + line` 雙重風格顯示，讓關鍵殘基在 ribbon 背景中更突出；② 標籤 `backgroundColor` 由深藍 `rgba(30,58,95,0.9)` 改為橘色 `rgba(194,65,12,0.92)`，與說明文字「橘色標籤 = 關鍵殘基」一致；PDF 截圖用的 `buildPrintContainer` 標籤顏色同步更新。
-- **突變位點分析 backbone 排除（2026-05-17 v5 修正）**：backbone 原子（N/CA/C/O/OXT）形成的 H-bond 即使突變也不影響（backbone 結構不變），不應列入突變建議。`renderMutations()` 與 PDF 突變分析段落均加入 `BACKBONE` Set 過濾，`scHbonds = hbonds.filter(hb => !BACKBONE.has(hb.protAtom))` 後只列 side chain 交互的殘基；近鄰表格的氫鍵標記仍使用全部 hbonds（`hbKeys`）。
+- **突變位點分析 backbone 排除（2026-05-17 v5 修正）**：backbone 原子（N/CA/C/O/OXT）形成的 H-bond 即使突變也不影響（backbone 結構不變），不應列入突變建議。`renderMutations()` 與 PDF 突變分析段落均加入 `BACKBONE` Set 過濾，`scHbonds = hbonds.filter(hb => !BACKBONE.has(hb.protAtom))` 後只列 side chain 交互的殘基；近鄰表格的氫鍵標記仍使用全部 hbonds（`hbKeys`）。詳細條件已整理至 §「突變位點分析條件」章節。高優先卡片顯示「Side chain 氫鍵交互（原子：protAtom）」；中優先區分「純近鄰」與「backbone H-bond only」並加注說明。
 
 ---
 
