@@ -18,7 +18,7 @@
 | 蛋白質結構載入 | 輸入 PDB ID（自動從 RCSB 取得）或上傳 `.pdb` / `.ent` / `.cif` 檔案 |
 | 3D 視覺化 | py3Dmol（CDN）— cartoon / stick / surface / sphere 風格切換 |
 | 氫鍵分析 | D–A 重原子距離 ≤ cutoff（預設 **3.6 Å**），逐殘基去重 |
-| 突變位點建議 | 20 種胺基酸的突變策略字典 + 功能影響評估 |
+| 突變位點建議 | 20 種胺基酸的突變策略字典 + 功能影響評估；**僅列 side chain 原子交互（backbone N/CA/C/O/OXT 排除）** |
 | 報告匯出 | HTML、JSON、CSV、PDF（html2canvas + jsPDF）、PyMOL 指令碼 |
 | 格式支援 | PDB 固定欄位格式 + mmCIF `_atom_site` loop 格式（auth_* 優先） |
 
@@ -91,6 +91,7 @@ let fileFormat      // 'pdb' 或 'cif'
 - 預設 cutoff：**3.6 Å**（共 4 處 JS fallback + 1 處 HTML input value）
 - 篩選原子：蛋白質 `N`/`O`/`S` 與配體 `N`/`O`/`S` 之間的重原子距離
 - 去重邏輯：同一殘基保留最短距離的配對
+- **突變位點過濾原則**：backbone 原子（`N`/`CA`/`C`/`O`/`OXT`）形成的 H-bond 不受突變影響，故 `renderMutations()` 與 PDF 突變分析段落均以 `BACKBONE` set 過濾，僅保留 side chain 原子的交互殘基。`hbKeys`（全部 H-bond）仍用於近鄰表格的「⚡ 氫鍵殘基」標記；`scHbKeys`（side chain only）用於突變分析的去重與中優先排除。
 
 ### 3D 視覺化按鈕對照表（2026-05-17 v2 — toggle + reset-first 版）
 
@@ -152,6 +153,7 @@ let fileFormat      // 'pdb' 或 'cif'
 - **按鈕功能疊加 + toggle + Reset 無效（2026-05-17 v2 修正）**：① Surface 多次點擊會 addSurface 堆疊 → 加入 `surfaceActive` flag 防重複；② style 按鈕再按一次無法回預設 → `setStyle()` 加 toggle 邏輯（`currentStyle===s` 時回 cartoon）；③ 標籤/旋轉按鈕缺乏 active 視覺狀態 → 改以 `id="btn-*"` 精準更新；④ 「重置視角」改名為 Reset，`resetView()` 修正為先停旋轉再 zoom（有配體用 `zoomTo({resn:ligResname})` 否則 `zoomTo({})` zoom all）。
 - **標籤關閉無效（2026-05-17 v3 修正）**：`viewer.setStyle({},{})` 不清除 `addLabel()` 的標籤 → 在 `applyStyle()` 開頭加 `viewer.removeAllLabels()`，確保 `labelsOn=false` 時真正隱藏。操作說明文字同步修正：「右鍵平移」→「右鍵縮放」，新增「中鍵平移」。
 - **Cartoon 模式 + 標籤顏色（2026-05-17 v4 修正）**：① Cartoon 模式下 H-bond 交互殘基現以 `cartoon + line` 雙重風格顯示，讓關鍵殘基在 ribbon 背景中更突出；② 標籤 `backgroundColor` 由深藍 `rgba(30,58,95,0.9)` 改為橘色 `rgba(194,65,12,0.92)`，與說明文字「橘色標籤 = 關鍵殘基」一致；PDF 截圖用的 `buildPrintContainer` 標籤顏色同步更新。
+- **突變位點分析 backbone 排除（2026-05-17 v5 修正）**：backbone 原子（N/CA/C/O/OXT）形成的 H-bond 即使突變也不影響（backbone 結構不變），不應列入突變建議。`renderMutations()` 與 PDF 突變分析段落均加入 `BACKBONE` Set 過濾，`scHbonds = hbonds.filter(hb => !BACKBONE.has(hb.protAtom))` 後只列 side chain 交互的殘基；近鄰表格的氫鍵標記仍使用全部 hbonds（`hbKeys`）。
 
 ---
 

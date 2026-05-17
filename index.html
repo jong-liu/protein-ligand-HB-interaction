@@ -898,12 +898,16 @@ function renderHBondTable() {
 // Render Mutations
 // ═══════════════════════════════════════════════════════════════════════════
 function renderMutations() {
-  const hbKeys = new Set(hbonds.map(h=>`${h.protChain}_${h.protResSeq}`));
+  // backbone 原子：突變後 backbone 不變，故排除在突變位點分析之外
+  const BACKBONE = new Set(["N","CA","C","O","OXT"]);
+  const scHbonds = hbonds.filter(hb => !BACKBONE.has(hb.protAtom));
+
+  const hbKeys = new Set(scHbonds.map(h=>`${h.protChain}_${h.protResSeq}`));
   let html = "";
 
-  // High priority: H-bond residues
+  // High priority: H-bond 殘基（僅 side chain 交互）
   const hbUniq = new Map();
-  for (const hb of hbonds) {
+  for (const hb of scHbonds) {
     const k = `${hb.protChain}_${hb.protResSeq}`;
     if (!hbUniq.has(k) || hb.distance < hbUniq.get(k).distance)
       hbUniq.set(k, hb);
@@ -1112,10 +1116,13 @@ function buildPrintContainer() {
     </tr>`;
   }).join("");
 
-  // 突變分析
-  const hbKeys = new Set(hbonds.map(h => `${h.protChain}_${h.protResSeq}`));
+  // 突變分析（backbone 原子排除：突變不改變 backbone，故只列 side chain 交互）
+  const BACKBONE_MUT = new Set(["N","CA","C","O","OXT"]);
+  const scHbonds = hbonds.filter(hb => !BACKBONE_MUT.has(hb.protAtom));
+  const hbKeys    = new Set(hbonds.map(h => `${h.protChain}_${h.protResSeq}`));   // 全部：近鄰表格標記用
+  const scHbKeys  = new Set(scHbonds.map(h => `${h.protChain}_${h.protResSeq}`)); // side chain：突變分析用
   const hbUniq = new Map();
-  for (const hb of hbonds) {
+  for (const hb of scHbonds) {
     const k = `${hb.protChain}_${hb.protResSeq}`;
     if (!hbUniq.has(k) || hb.distance < hbUniq.get(k).distance) hbUniq.set(k, hb);
   }
@@ -1135,7 +1142,7 @@ function buildPrintContainer() {
   }
   let cnt = 0;
   for (const r of nearbyRes) {
-    if (hbKeys.has(`${r.chain}_${r.resSeq}`)) continue;
+    if (scHbKeys.has(`${r.chain}_${r.resSeq}`)) continue;  // 以 side chain 集合排除
     if (++cnt > 8) break;
     const hint = MUTATION_HINTS[r.resName] || `${r.resName}→Ala`;
     mutHtml += `<div style="border-left:4px solid #ea580c;background:#fff7ed;
