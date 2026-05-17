@@ -259,13 +259,13 @@ tr:hover td{background:#f8fafc}
         <div class="section-title">🧬 3D 結構視覺化</div>
         <div id="mol-viewer"></div>
         <div class="viewer-controls">
-          <button class="view-btn active" onclick="setStyle('cartoon')">Cartoon</button>
-          <button class="view-btn" onclick="setStyle('stick')">Stick</button>
-          <button class="view-btn" onclick="setStyle('surface')">表面</button>
-          <button class="view-btn" onclick="setStyle('sphere')">Sphere</button>
-          <button class="view-btn" onclick="toggleLabels()">標籤 開/關</button>
-          <button class="view-btn" onclick="toggleSpin()">旋轉</button>
-          <button class="view-btn" onclick="resetView()">🔍 重置視角</button>
+          <button class="view-btn active" id="btn-cartoon" onclick="setStyle('cartoon')">Cartoon</button>
+          <button class="view-btn" id="btn-stick"   onclick="setStyle('stick')">Stick</button>
+          <button class="view-btn" id="btn-surface"  onclick="setStyle('surface')">表面</button>
+          <button class="view-btn" id="btn-sphere"   onclick="setStyle('sphere')">Sphere</button>
+          <button class="view-btn active" id="btn-labels" onclick="toggleLabels()">標籤</button>
+          <button class="view-btn" id="btn-spin"    onclick="toggleSpin()">旋轉</button>
+          <button class="view-btn" id="btn-reset"   onclick="resetView()">Reset</button>
         </div>
         <div style="font-size:.72rem;color:var(--sub);margin-top:.4rem">
           黃色 = 氫鍵 | 橘色標籤 = 關鍵殘基 | 左鍵旋轉 | 右鍵平移 | 滾輪縮放
@@ -334,9 +334,10 @@ let uploadedFileName = "";
 let fileFormat = "pdb";  // "pdb" 或 "cif"
 let hbonds      = [];
 let nearbyRes   = [];
-let labelsOn    = true;
-let spinning    = false;
-let currentStyle = "cartoon";
+let labelsOn      = true;
+let spinning      = false;
+let currentStyle  = "cartoon";
+let surfaceActive = false;   // 防止 surface 疊加
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Constants
@@ -680,7 +681,14 @@ function renderViewer(pdb, fmt = "pdb") {
 
 function applyStyle(style) {
   if (!viewer) return;
-  viewer.setStyle({}, {});  // clear
+
+  // ── Step 1: 若目前有 surface 且要切換到其他模式，先移除（防疊加）──
+  if (surfaceActive && style !== "surface") {
+    try { viewer.removeAllSurfaces(); } catch(e) {}
+    surfaceActive = false;
+  }
+
+  viewer.setStyle({}, {});  // clear all atom styles
 
   const hasLig = ligResname !== "";
 
@@ -694,11 +702,14 @@ function applyStyle(style) {
     viewer.setStyle({hetflag:false},
       {stick:{colorscheme:"spectrum", radius:0.15}});
   }
-  // Surface（蛋白質表面電位圖，適合觀察結合口袋）
+  // Surface（蛋白質表面電位圖，適合觀察結合口袋）— 防止重複 addSurface
   if (style === "surface") {
-    viewer.addSurface($3Dmol.SurfaceType.VDW,
-      {opacity:0.75, colorscheme:{gradient:"rwb", min:-1, max:1}},
-      {hetflag:false});
+    if (!surfaceActive) {
+      viewer.addSurface($3Dmol.SurfaceType.VDW,
+        {opacity:0.75, colorscheme:{gradient:"rwb", min:-1, max:1}},
+        {hetflag:false});
+      surfaceActive = true;
+    }
   }
   // Sphere（每個原子以球體顯示，適合 VDW 半徑比較）
   if (style === "sphere") {
@@ -744,22 +755,56 @@ function applyStyle(style) {
 
   viewer.render();
   currentStyle = style;
-  document.querySelectorAll(".view-btn").forEach(b => b.classList.remove("active"));
-  const map = {"cartoon":0, "stick":1, "surface":2, "sphere":3};
-  const btns = document.querySelectorAll(".view-btn");
-  if (map[style] !== undefined) btns[map[style]].classList.add("active");
+
+  // ── Step 2: 更新按鈕 active 狀態（以 ID 精準定位，避免 index 錯位）──
+  ["cartoon","stick","surface","sphere"].forEach(s => {
+    const b = document.getElementById("btn-" + s);
+    if (b) b.classList.toggle("active", s === style);
+  });
+  // 標籤按鈕跟隨 labelsOn 狀態
+  const lBtn = document.getElementById("btn-labels");
+  if (lBtn) lBtn.classList.toggle("active", labelsOn);
 }
 
-function setStyle(s) { applyStyle(s); }
-function resetView()  { viewer && viewer.zoomTo({resn:ligResname},300); }
+// setStyle：互斥切換 — 再按同一個已 active 的樣式鍵 → 回預設 cartoon
+function setStyle(s) {
+  if (currentStyle === s && s !== "cartoon") {
+    applyStyle("cartoon");   // 解除 → 回預設
+  } else {
+    applyStyle(s);           // 切換（applyStyle 內已處理 surface 防疊加）
+  }
+}
+
+// resetView：停止旋轉 + 視角歸位（有配體以配體為中心，否則 zoom all）
+function resetView() {
+  if (!viewer) return;
+  if (spinning) {
+    viewer.spin(false);
+    spinning = false;
+    const sBtn = document.getElementById("btn-spin");
+    if (sBtn) sBtn.classList.remove("active");
+  }
+  if (ligResname && ligResname !== "") {
+    viewer.zoomTo({resn: ligResname}, 300);
+  } else {
+    viewer.zoomTo({}, 300);
+  }
+  viewer.render();
+}
+
+// toggleLabels：再按一次 → 關閉標籤回預設（labelsOn 預設 true）
 function toggleLabels() {
   labelsOn = !labelsOn;
-  applyStyle(currentStyle);
+  applyStyle(currentStyle);  // applyStyle 內已同步更新 btn-labels active
 }
+
+// toggleSpin：再按一次 → 停止旋轉
 function toggleSpin() {
   if (!viewer) return;
-  if (spinning) { viewer.spin(false); spinning=false; }
-  else { viewer.spin('y', 1); spinning=true; }
+  if (spinning) { viewer.spin(false); spinning = false; }
+  else          { viewer.spin('y', 1); spinning = true; }
+  const sBtn = document.getElementById("btn-spin");
+  if (sBtn) sBtn.classList.toggle("active", spinning);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

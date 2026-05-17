@@ -58,6 +58,7 @@ let nearbyRes       // 5Å 內近鄰殘基陣列
 let labelsOn        // 標籤開關
 let spinning        // 旋轉開關
 let currentStyle    // 目前 3D 風格（'cartoon'|'stick'|'surface'|'sphere'）
+let surfaceActive   // Boolean：surface layer 是否已 addSurface（防疊加用）
 let uploadedPdbText // 上傳檔案的文字內容
 let uploadedFileName// 上傳檔案名稱
 let fileFormat      // 'pdb' 或 'cif'
@@ -74,11 +75,11 @@ let fileFormat      // 'pdb' 或 'cif'
 | `findNearby(atoms, lig, cutoff=5.0)` | 5Å 近鄰殘基 |
 | `runAnalysis(id, rawPdb, ligName, cutoff, chainFilter, fmt)` | 分析主流程，配體比對 case-insensitive |
 | `renderViewer(pdb, fmt)` | py3Dmol 初始化與格式傳入 |
-| `applyStyle(style)` | 套用 3D 風格：`'cartoon'`/`'stick'`/`'surface'`/`'sphere'`，自動更新 active 按鈕 |
-| `setStyle(s)` | `applyStyle(s)` 的公開包裝函數 |
-| `toggleLabels()` | 切換 H-Bond 殘基標籤顯示／隱藏（呼叫 applyStyle 重繪） |
-| `toggleSpin()` | 連續旋轉開關：`viewer.spin('y',1)` 啟動、`viewer.spin(false)` 停止 |
-| `resetView()` | 重置視角至配體為中心：`viewer.zoomTo({resn:ligResname},300)` |
+| `applyStyle(style)` | 套用 3D 風格；執行前先移除舊 surface（防疊加）；以 id 更新按鈕 active 狀態 |
+| `setStyle(s)` | 互斥切換：若已 active 同一樣式則回預設 cartoon；否則套用新樣式 |
+| `toggleLabels()` | 切換 H-Bond 殘基標籤顯示／隱藏；再按一次 → 關閉（labelsOn 預設 true） |
+| `toggleSpin()` | 連續旋轉開關：再按停止；同步更新 `btn-spin` active 狀態 |
+| `resetView()` | 停止旋轉 + 視角歸位：有配體以配體為中心，否則 zoom all |
 | `fetchAndAnalyze()` | 主按鈕入口：PDB ID 下載 或 使用 uploadedPdbText |
 | `readFile(file)` | 上傳處理，偵測 .cif，更新 span 文字，重置 input.value |
 | `buildPrintContainer()` | 建立隱藏 794px 報告 div 供 PDF 截圖 |
@@ -91,19 +92,23 @@ let fileFormat      // 'pdb' 或 'cif'
 - 篩選原子：蛋白質 `N`/`O`/`S` 與配體 `N`/`O`/`S` 之間的重原子距離
 - 去重邏輯：同一殘基保留最短距離的配對
 
-### 3D 視覺化按鈕對照表（2026-05-17 修正確認版）
+### 3D 視覺化按鈕對照表（2026-05-17 v2 — toggle + reset-first 版）
 
-| 按鈕 | onclick | 效果 | py3Dmol 呼叫 |
-|------|---------|------|-------------|
-| Cartoon | `setStyle('cartoon')` | ribbon 螺旋與 sheet 顯示（預設） | `setStyle({hetflag:false},{cartoon:{...}})` |
-| Stick | `setStyle('stick')` | 所有殘基以鍵棒顯示，適合近距離觀察 | `setStyle({hetflag:false},{stick:{colorscheme:"spectrum",radius:0.15}})` |
-| 表面 | `setStyle('surface')` | 蛋白質表面電位圖，適合觀察結合口袋 | `addSurface($3Dmol.SurfaceType.VDW,{opacity:0.75,...})` |
-| Sphere | `setStyle('sphere')` | 每個原子以球體顯示，VDW 半徑比較 | `setStyle({hetflag:false},{sphere:{colorscheme:"spectrum",scale:0.35}})` |
-| 標籤 開/關 | `toggleLabels()` | CA 原子位置顯示/隱藏殘基名稱標籤 | 切換 `labelsOn`，呼叫 `applyStyle(currentStyle)` |
-| 旋轉 | `toggleSpin()` | 結構自動慢速旋轉（再次點擊停止） | `viewer.spin('y',1)` / `viewer.spin(false)` |
-| 重置視角 | `resetView()` | 視窗回到以配體為中心的預設視角 | `viewer.zoomTo({resn:ligResname},300)` |
+| 按鈕 | id | onclick | 行為 | 再按一次 |
+|------|----|---------|------|---------|
+| Cartoon | `btn-cartoon` | `setStyle('cartoon')` | ribbon 螺旋與 sheet（預設） | 已是預設，維持不變 |
+| Stick | `btn-stick` | `setStyle('stick')` | 所有殘基鍵棒顯示 | 回預設 cartoon |
+| 表面 | `btn-surface` | `setStyle('surface')` | VDW 表面電位圖（防重複 addSurface） | 回預設 cartoon，移除 surface |
+| Sphere | `btn-sphere` | `setStyle('sphere')` | 球體 VDW 半徑顯示 | 回預設 cartoon |
+| 標籤 | `btn-labels` | `toggleLabels()` | H-Bond 殘基標籤顯示（預設開） | 關閉標籤 |
+| 旋轉 | `btn-spin` | `toggleSpin()` | 連續旋轉 `viewer.spin('y',1)` | 停止旋轉 |
+| Reset | `btn-reset` | `resetView()` | 停止旋轉 + zoom 至配體（無配體則 zoom all） | — |
 
-> **注意**：配體無論在何種模式下，固定以 `stick+sphere` 雙重風格顯示。
+> **按鈕設計原則（2026-05-17 v2）：**
+> 1. **不疊加**：`applyStyle()` 執行前先 `viewer.removeAllSurfaces()` + `viewer.setStyle({},{})` 清除舊狀態
+> 2. **toggle 解除**：再按同一個 active 按鈕 → 回預設 cartoon（style 類）或關閉（labels/spin 類）
+> 3. **ID 精準定位**：所有按鈕改以 `id="btn-*"` 管理 active class，避免舊版 index 錯位問題
+> 4. 配體無論在何種模式下，固定以 `stick+sphere` 雙重風格顯示
 
 ---
 
@@ -144,6 +149,7 @@ let fileFormat      // 'pdb' 或 'cif'
 - 配體大小寫：`runAnalysis()` 使用 `toLowerCase()` 比對，`ligResname` 儲存原始大小寫
 - PDF 截圖文字：使用 html2canvas 而非純文字 jsPDF（支援中文）
 - **3D 按鈕錯誤（2026-05-17 修正）**：舊版按鈕缺少 Stick / Sphere，多了「Cartoon+表面」且不在預期清單中；`toggleSpin()` 誤用 `viewer.rotate()`（單次旋轉）而非 `viewer.spin('y',1)`（連續旋轉）。已全數修正，按鈕順序改為 Cartoon → Stick → 表面 → Sphere → 標籤 → 旋轉 → 重置視角。
+- **按鈕功能疊加 + toggle + Reset 無效（2026-05-17 v2 修正）**：① Surface 多次點擊會 addSurface 堆疊 → 加入 `surfaceActive` flag 防重複；② style 按鈕再按一次無法回預設 → `setStyle()` 加 toggle 邏輯（`currentStyle===s` 時回 cartoon）；③ 標籤/旋轉按鈕缺乏 active 視覺狀態 → 改以 `id="btn-*"` 精準更新；④ 「重置視角」改名為 Reset，`resetView()` 修正為先停旋轉再 zoom（有配體用 `zoomTo({resn:ligResname})` 否則 `zoomTo({})` zoom all）。
 
 ---
 
