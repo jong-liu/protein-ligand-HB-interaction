@@ -203,9 +203,6 @@ const allHbKeys = new Set(hbonds.map(h=>`${h.protChain}_${h.protResSeq}`));   //
 - **PDB ID 加上 RCSB 超連結（2026-05-19 修正）**：分析摘要中的 PDB ID 由純文字改為超連結，點擊後以新頁籤開啟 `https://www.rcsb.org/structure/{ID}`。樣式沿用 `color:inherit` + `text-decoration:underline dotted`，視覺上與周圍文字一致但可辨識為連結。修改位置：`runAnalysis()` 內 `document.getElementById("info-grid").innerHTML` 的 PDB ID `<span>` 標籤。
 - **HTML 報告 3D viewer 跑到左上角（2026-05-19 修正）**：`exportHTML()` 生成的報告中，py3Dmol 以絕對定位插入 canvas，若父容器缺少 `position:relative` 則 canvas 脫離 `.card` 跑到頁面左上角，正確位置呈現黑色空盒。修正方式：在報告內嵌 CSS 的 `#viewer` 規則補充 `position:relative`，讓 canvas 正確包覆於容器內。
 - **PDB ID 超連結僅限 RCSB 來源（2026-05-19 修正）**：新增全域旗標 `fromRCSB`（預設 `false`）。僅當由 RCSB 成功下載時設為 `true`（`fetchPDB()` 成功後），本機上傳（`readFile()` / 無 PDB ID 的 `fetchAndAnalyze()` 分支）維持 `false`。`renderStats()` 預先計算 `pdbIdHtml`（字串拼接，避免巢狀 template literal 解析問題），再嵌入 info-grid innerHTML，確保上傳的自訂 PDB 檔不會出現無效的 RCSB 連結。
-- **index.html 工作目錄截斷問題（2026-05-19 調查）**：本次「上傳仍顯示連結」bug 的真正根因是工作目錄的 `index.html` 被截斷（1,463 行，少於正確的 1,485 行），導致末尾的 `showStatus`、`hideStatus`、`showError` 等函數遺失，頁面行為異常。根本原因是 sandbox 的 git workaround（`GIT_INDEX_FILE` + 直接寫入 `.git/refs/heads/main`）造成 `.git/index.lock` 殘留，進而讓工作目錄與 git index 不同步。**修復方式**：`git show HEAD:index.html` 直接寫回磁碟（Python 腳本），還原至 HEAD 的完整 1,485 行版本。`origin/main` 已包含所有正確修正，無需額外 push。
-- **5/19 所有修改回退並重新實作（2026-05-19）**：因 5/19 多次 git workaround 導致版本混亂，回退至 `6183851`（5/17 最後穩定版），在乾淨基礎上重新實作 `fromRCSB` 旗標：全域預設 `false`；RCSB 下載成功後設 `true`；`readFile()` 與 `fetchAndAnalyze()` 上傳分支均設 `false`；`renderStats()` 用字串拼接預計算 `pdbIdHtml` 再插入 innerHTML（避免巢狀 template literal）。
-- **HTML 報告 3D viewer 跑到左上角（2026-05-19 再次修正）**：回退後此 fix 一併遺失，重新補回：`exportHTML()` 內嵌 CSS 的 `#viewer` 規則加入 `position:relative`，防止 py3Dmol canvas 逃逸至頁面左上角。
 
 ---
 
@@ -343,4 +340,49 @@ git push
 | 高 | 多配體同時分析 | A | 中 |
 | 高 | 氫鍵網絡圖（D3.js 或 Mermaid） | A/E | 中 |
 | 中 | 水分子（HOH）氫鍵顯示開關 | A | 低 |
-| 中 | 殘基序列搜尋高亮 | 
+| 中 | 殘基序列搜尋高亮 | A | 低 |
+| 中 | Excel (.xlsx) 匯出 | E | 中 |
+| 中 | 疏水接觸分析（≤ 4.0 Å C-C） | A | 中 |
+| 低 | 多結構疊合比較 | A | 高 |
+| 低 | AlphaFold DB 整合（直接輸入 UniProt ID） | A | 中 |
+| 低 | 介面語言切換（中/英） | D | 低 |
+
+---
+
+## 8. 外部依賴（CDN）
+
+| 函式庫 | URL | 用途 |
+|--------|-----|------|
+| py3Dmol | `https://3dmol.org/build/3Dmol-min.js` | 3D 分子視覺化 |
+| html2canvas | `https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js` | PDF 截圖 |
+| jsPDF | `https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js` | PDF 生成 |
+
+所有外部函式庫均透過 `loadScriptIfNeeded(url, checkFn)` 動態載入，不預先阻塞頁面。
+
+---
+
+## 9. 開發注意事項
+
+### 修改 index.html 的原則
+
+1. **不整檔改寫**：使用 `Edit` 工具精準差異修改，避免 `Write` 覆蓋全檔（風險：截斷）
+2. **分段讀取**：大型讀取用 `offset` + `limit` 分段，避免超出上下文
+3. **不破壞函數邊界**：每次 Edit 的 `old_string` 需包含足夠上下文使其唯一
+4. **CDN 優先**：禁用 `pip install` / `npm install` 方式引入套件，只用 CDN
+
+### HTML 文件結構
+
+```
+index.html
+├── <head>        行  1–  30  meta, title, CDN preload
+├── <style>       行 30– 370  CSS 變數、RWD、動畫
+├── <body>        行 370– 400  layout 骨架
+│   ├── .sidebar  行 400– 760  左側控制面板
+│   └── #viewer-wrapper  右側 3D 視窗 + 分析面板
+├── <script>      行 760–1395  所有 JS 邏輯
+└── </html>       行 1395–1407
+```
+
+### 測試 Checklist（每次修改後）
+
+- [ ] `grep -c "syntax err
