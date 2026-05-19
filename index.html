@@ -332,6 +332,7 @@ let allAtoms    = [];
 let uploadedPdbText = null;
 let uploadedFileName = "";
 let fileFormat = "pdb";  // "pdb" 或 "cif"
+let fromRCSB   = false; // true = 由 RCSB 下載；false = 本機上傳（控制 PDB ID 是否顯示超連結）
 let hbonds      = [];
 let nearbyRes   = [];
 let labelsOn      = true;
@@ -841,9 +842,17 @@ function renderStats(id, atoms, ligands) {
       <div class="stat-lbl">近鄰殘基（5Å）</div></div>
   `;
 
+  // RCSB 下載才加超連結；本機上傳一律純文字
+  const pdbIdHtml = fromRCSB
+    ? '<a href="https://www.rcsb.org/structure/' + id
+      + '" target="_blank" rel="noopener"'
+      + ' style="color:inherit;text-decoration:underline dotted;text-underline-offset:3px;">'
+      + id + '</a>'
+    : id;
+
   document.getElementById("info-grid").innerHTML = `
     <span class="info-label">PDB ID</span>
-    <span class="info-value" style="font-family:monospace;font-weight:700">${id}</span>
+    <span class="info-value" style="font-family:monospace;font-weight:700">${pdbIdHtml}</span>
     <span class="info-label">配體</span>
     <span class="info-value" style="font-family:monospace">${ligResname}</span>
     <span class="info-label">所有配體</span>
@@ -997,8 +1006,9 @@ async function fetchAndAnalyze() {
     setFetchBtn(true);
     showStatus(`分析上傳的檔案：${uploadedFileName} ...`);
     try {
-      pdbData = uploadedPdbText;
-      pdbId   = uploadedFileName.replace(/\.pdb|\.ent|\.cif/i,"").toUpperCase();
+      pdbData  = uploadedPdbText;
+      pdbId    = uploadedFileName.replace(/\.pdb|\.ent|\.cif/i,"").toUpperCase();
+      fromRCSB = false;  // 本機上傳，不加 RCSB 超連結
       await runAnalysis(pdbId, pdbData, ligName, cutoff, chain, fileFormat);
     } catch(e) {
       showError(e.message || String(e));
@@ -1022,8 +1032,9 @@ async function fetchAndAnalyze() {
 
   try {
     const raw = await fetchPDB(id);
-    pdbData = raw;
-    pdbId   = id;
+    pdbData  = raw;
+    pdbId    = id;
+    fromRCSB = true;   // 確認來自 RCSB，允許顯示超連結
     await runAnalysis(id, raw, ligName, cutoff, chain);
   } catch(e) {
     showError(e.message || String(e));
@@ -1059,10 +1070,11 @@ function readFile(file) {
       // 偵測檔案格式
       fileFormat = /\.cif$/i.test(file.name) ? "cif" : "pdb";
       // 儲存至全域，讓「載入 & 分析」按鈕也能取用
-      uploadedPdbText = e.target.result;
+      uploadedPdbText  = e.target.result;
       uploadedFileName = file.name;
-      pdbData = uploadedPdbText;
-      pdbId   = file.name.replace(/\.pdb|\.ent|\.cif/i,"").toUpperCase();
+      pdbData  = uploadedPdbText;
+      pdbId    = file.name.replace(/\.pdb|\.ent|\.cif/i,"").toUpperCase();
+      fromRCSB = false;  // 本機上傳，不加 RCSB 超連結
       // 只更新文字 span，保留 <input> 元素讓使用者可再次點擊上傳
       const fmtTag = fileFormat === "cif"
         ? `<span style="background:#ede9fe;color:#5b21b6;font-size:.72rem;
@@ -1470,22 +1482,4 @@ function showStatus(msg) {
   bar.classList.add("show");
 }
 function setStatus(msg) { document.getElementById("status-text").textContent = msg; }
-function hideStatus()   { document.getElementById("status-bar").classList.remove("show"); }
-function showError(msg) {
-  const el = document.getElementById("error-banner");
-  el.textContent = "⚠ " + msg;
-  el.style.display = "block";
-}
-function hideError() { document.getElementById("error-banner").style.display = "none"; }
-function setFetchBtn(dis) {
-  const b = document.getElementById("fetch-btn");
-  b.disabled = dis;
-  b.textContent = dis ? "⏳ 分析中..." : "🔍 載入 & 分析";
-}
-
-// Enter key on PDB ID input
-document.getElementById("pdb-id-input")
-  .addEventListener("keydown", e => { if(e.key==="Enter") fetchAndAnalyze(); });
-</script>
-</body>
-</html>
+function hideStatus()   { documen
