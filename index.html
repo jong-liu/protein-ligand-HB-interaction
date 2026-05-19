@@ -843,7 +843,7 @@ function renderStats(id, atoms, ligands) {
 
   document.getElementById("info-grid").innerHTML = `
     <span class="info-label">PDB ID</span>
-    <span class="info-value" style="font-family:monospace;font-weight:700">${id}</span>
+    <span class="info-value" style="font-family:monospace;font-weight:700"><a href="https://www.rcsb.org/structure/${id}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline dotted;text-underline-offset:3px;">${id}</a></span>
     <span class="info-label">配體</span>
     <span class="info-value" style="font-family:monospace">${ligResname}</span>
     <span class="info-label">所有配體</span>

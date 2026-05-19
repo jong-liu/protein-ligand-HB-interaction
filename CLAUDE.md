@@ -200,6 +200,7 @@ const allHbKeys = new Set(hbonds.map(h=>`${h.protChain}_${h.protResSeq}`));   //
 - **標籤關閉無效（2026-05-17 v3 修正）**：`viewer.setStyle({},{})` 不清除 `addLabel()` 的標籤 → 在 `applyStyle()` 開頭加 `viewer.removeAllLabels()`，確保 `labelsOn=false` 時真正隱藏。操作說明文字同步修正：「右鍵平移」→「右鍵縮放」，新增「中鍵平移」。
 - **Cartoon 模式 + 標籤顏色（2026-05-17 v4 修正）**：① Cartoon 模式下 H-bond 交互殘基現以 `cartoon + line` 雙重風格顯示，讓關鍵殘基在 ribbon 背景中更突出；② 標籤 `backgroundColor` 由深藍 `rgba(30,58,95,0.9)` 改為橘色 `rgba(194,65,12,0.92)`，與說明文字「橘色標籤 = 關鍵殘基」一致；PDF 截圖用的 `buildPrintContainer` 標籤顏色同步更新。
 - **突變位點分析 backbone 排除（2026-05-17 v5 修正）**：backbone 原子（N/CA/C/O/OXT）形成的 H-bond 即使突變也不影響（backbone 結構不變），不應列入突變建議。`renderMutations()` 與 PDF 突變分析段落均加入 `BACKBONE` Set 過濾，`scHbonds = hbonds.filter(hb => !BACKBONE.has(hb.protAtom))` 後只列 side chain 交互的殘基；近鄰表格的氫鍵標記仍使用全部 hbonds（`hbKeys`）。詳細條件已整理至 §「突變位點分析條件」章節。高優先卡片顯示「Side chain 氫鍵交互（原子：protAtom）」；中優先區分「純近鄰」與「backbone H-bond only」並加注說明。
+- **PDB ID 加上 RCSB 超連結（2026-05-19 修正）**：分析摘要中的 PDB ID 由純文字改為超連結，點擊後以新頁籤開啟 `https://www.rcsb.org/structure/{ID}`。樣式沿用 `color:inherit` + `text-decoration:underline dotted`，視覺上與周圍文字一致但可辨識為連結。修改位置：`runAnalysis()` 內 `document.getElementById("info-grid").innerHTML` 的 PDB ID `<span>` 標籤。
 
 ---
 
