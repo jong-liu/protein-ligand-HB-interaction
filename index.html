@@ -332,7 +332,6 @@ let allAtoms    = [];
 let uploadedPdbText = null;
 let uploadedFileName = "";
 let fileFormat = "pdb";  // "pdb" 或 "cif"
-let fromRCSB   = false; // true = 由 RCSB 下載，false = 本機上傳（PDB ID 連結是否顯示的依據）
 let hbonds      = [];
 let nearbyRes   = [];
 let labelsOn      = true;
@@ -842,16 +841,9 @@ function renderStats(id, atoms, ligands) {
       <div class="stat-lbl">近鄰殘基（5Å）</div></div>
   `;
 
-  // 只有從 RCSB 成功下載時才加超連結；本機上傳一律純文字
-  const pdbIdHtml = fromRCSB
-    ? '<a href="https://www.rcsb.org/structure/' + id + '" target="_blank" rel="noopener"'
-      + ' style="color:inherit;text-decoration:underline dotted;text-underline-offset:3px;">'
-      + id + '</a>'
-    : id;
-
   document.getElementById("info-grid").innerHTML = `
     <span class="info-label">PDB ID</span>
-    <span class="info-value" style="font-family:monospace;font-weight:700">${pdbIdHtml}</span>
+    <span class="info-value" style="font-family:monospace;font-weight:700">${id}</span>
     <span class="info-label">配體</span>
     <span class="info-value" style="font-family:monospace">${ligResname}</span>
     <span class="info-label">所有配體</span>
@@ -1005,9 +997,8 @@ async function fetchAndAnalyze() {
     setFetchBtn(true);
     showStatus(`分析上傳的檔案：${uploadedFileName} ...`);
     try {
-      pdbData  = uploadedPdbText;
-      pdbId    = uploadedFileName.replace(/\.pdb|\.ent|\.cif/i,"").toUpperCase();
-      fromRCSB = false;  // 本機上傳，不加 RCSB 超連結
+      pdbData = uploadedPdbText;
+      pdbId   = uploadedFileName.replace(/\.pdb|\.ent|\.cif/i,"").toUpperCase();
       await runAnalysis(pdbId, pdbData, ligName, cutoff, chain, fileFormat);
     } catch(e) {
       showError(e.message || String(e));
@@ -1031,9 +1022,8 @@ async function fetchAndAnalyze() {
 
   try {
     const raw = await fetchPDB(id);
-    pdbData   = raw;
-    pdbId     = id;
-    fromRCSB  = true;   // 確認來自 RCSB，允許顯示超連結
+    pdbData = raw;
+    pdbId   = id;
     await runAnalysis(id, raw, ligName, cutoff, chain);
   } catch(e) {
     showError(e.message || String(e));
@@ -1069,11 +1059,10 @@ function readFile(file) {
       // 偵測檔案格式
       fileFormat = /\.cif$/i.test(file.name) ? "cif" : "pdb";
       // 儲存至全域，讓「載入 & 分析」按鈕也能取用
-      uploadedPdbText  = e.target.result;
+      uploadedPdbText = e.target.result;
       uploadedFileName = file.name;
-      pdbData  = uploadedPdbText;
-      pdbId    = file.name.replace(/\.pdb|\.ent|\.cif/i,"").toUpperCase();
-      fromRCSB = false;  // 本機上傳，不加 RCSB 超連結
+      pdbData = uploadedPdbText;
+      pdbId   = file.name.replace(/\.pdb|\.ent|\.cif/i,"").toUpperCase();
       // 只更新文字 span，保留 <input> 元素讓使用者可再次點擊上傳
       const fmtTag = fileFormat === "cif"
         ? `<span style="background:#ede9fe;color:#5b21b6;font-size:.72rem;
@@ -1351,7 +1340,7 @@ header h1{font-size:1.5rem;font-weight:700}
 .stat-box{background:var(--blue-light);border-radius:8px;text-align:center;padding:.8rem}
 .stat-val{font-size:2rem;font-weight:800;color:var(--blue)}
 .stat-lbl{font-size:.72rem;color:var(--sub)}
-#viewer{width:100%;height:400px;border-radius:8px;overflow:hidden;background:#0f1923;position:relative}
+#viewer{width:100%;height:400px;border-radius:8px;overflow:hidden;background:#0f1923}
 table{width:100%;border-collapse:collapse;font-size:.85rem}
 th{background:var(--blue-light);padding:.5rem .7rem;text-align:left;font-weight:700;border-bottom:2px solid var(--border);font-size:.78rem}
 td{padding:.4rem .7rem;border-bottom:1px solid var(--border)}
@@ -1483,4 +1472,20 @@ function showStatus(msg) {
 function setStatus(msg) { document.getElementById("status-text").textContent = msg; }
 function hideStatus()   { document.getElementById("status-bar").classList.remove("show"); }
 function showError(msg) {
-  const el = document.getElementById("error-ba
+  const el = document.getElementById("error-banner");
+  el.textContent = "⚠ " + msg;
+  el.style.display = "block";
+}
+function hideError() { document.getElementById("error-banner").style.display = "none"; }
+function setFetchBtn(dis) {
+  const b = document.getElementById("fetch-btn");
+  b.disabled = dis;
+  b.textContent = dis ? "⏳ 分析中..." : "🔍 載入 & 分析";
+}
+
+// Enter key on PDB ID input
+document.getElementById("pdb-id-input")
+  .addEventListener("keydown", e => { if(e.key==="Enter") fetchAndAnalyze(); });
+</script>
+</body>
+</html>
