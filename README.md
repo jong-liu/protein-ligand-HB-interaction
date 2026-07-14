@@ -20,7 +20,7 @@
 
 ## 快速開始
 
-線上版（推薦）直接開啟 [https://jong-liu.github.io/pymol-HB-interaction/](https://jong-liu.github.io/protein-ligand-HB-interaction/) 即可使用。
+線上版（推薦）直接開啟 [https://jong-liu.github.io/protein-ligand-HB-interaction/](https://jong-liu.github.io/protein-ligand-HB-interaction/) 即可使用。
 
 本機使用只需下載 `index.html` 後用瀏覽器開啟——它是單一檔案、純瀏覽器端 JavaScript，無伺服器依賴。所有外部函式庫皆透過 CDN 動態載入。
 
