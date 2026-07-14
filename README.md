@@ -3,7 +3,7 @@
 蛋白質–配體 **氫鍵（Hydrogen Bond）交互作用** 分析與突變位點建議工具。
 輸入 PDB ID 或上傳結構檔，即可在瀏覽器中完成 3D 視覺化、氫鍵偵測與突變設計參考，全程無需安裝任何軟體。
 
-**線上使用：** https://jong-liu.github.io/pymol-HB-interaction/
+**線上使用：** https://jong-liu.github.io/protein-ligand-HB-interaction/
 
 ---
 
@@ -20,7 +20,7 @@
 
 ## 快速開始
 
-線上版（推薦）直接開啟 https://jong-liu.github.io/pymol-HB-interaction/ 即可使用。
+線上版（推薦）直接開啟 [https://jong-liu.github.io/pymol-HB-interaction/](https://jong-liu.github.io/protein-ligand-HB-interaction/) 即可使用。
 
 本機使用只需下載 `index.html` 後用瀏覽器開啟——它是單一檔案、純瀏覽器端 JavaScript，無伺服器依賴。所有外部函式庫皆透過 CDN 動態載入。
 
@@ -47,7 +47,7 @@
 ## 專案結構
 
 ```
-pymol-HB-interaction/
+protein-ligand-HB-interaction/
 ├── index.html          ← 主交付物（GitHub Pages 唯一追蹤檔）
 ├── hb_analyzer.py      ← Python CLI（本機離線用，不推送）
 ├── pymol_automation.py ← PyMOL API 腳本（本機離線用，不推送）
