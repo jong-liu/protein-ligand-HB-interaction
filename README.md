@@ -1,4 +1,4 @@
-# PyMOL HB Interaction Analyzer
+# Protein-Ligand HB Interaction Analyzer
 
 蛋白質–配體 **氫鍵（Hydrogen Bond）交互作用** 分析與突變位點建議工具。
 輸入 PDB ID 或上傳結構檔，即可在瀏覽器中完成 3D 視覺化、氫鍵偵測與突變設計參考，全程無需安裝任何軟體。
